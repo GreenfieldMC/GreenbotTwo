@@ -1,0 +1,10 @@
+bin/
+obj/
+/packages/
+riderModule.iml
+/_ReSharper.Caches/
+
+# Appsetting ignores
+appsettings.local.json
+appsettings.Development.json
+appsettings.Production.json
