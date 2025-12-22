@@ -17,7 +17,7 @@ public class ApplyInteractions
 {
 
     public static readonly EmbedProperties ApplicationStartEmbed = GenericEmbeds.Info("Greenfield Application Service",
-        "Hi! Welcome to Greenfield, and thank you for considering becoming a build member! Please complete all sections of the application by clicking the buttons below and filling out each required form.\n\nIf you have any questions or concerns about the application process, please ask a Staff member for assistance.\n\nGood Luck!");
+        "Hi! Welcome to Greenfield, and thank you for considering becoming a build member! Please complete all sections of the application by clicking the buttons below and filling out each required form.\n\nIf you have any questions or concerns about the application process, please ask a Staff member for assistance. Your progress before final submission (except for image uploads) will be saved.\n\nGood Luck!");
     public static readonly EmbedProperties ApplicationSubmitEmbed = GenericEmbeds.Success("Greenfield Application Service",
         "Thank you for submitting your application to join the Greenfield Build Team! Your application has been received and is now under review. We appreciate your interest and the time you've taken to apply. We will be in touch with you regarding the status of your application as soon as possible. Good luck!");
     public static readonly EmbedProperties ApplicationNotInProgressEmbed = GenericEmbeds.UserError("Greenfield Application Service",
@@ -198,7 +198,13 @@ public class ApplyInteractions
         [ComponentInteraction("apply_terms_modal")]
         public async Task HandleTermsSubmission()
         {
-            await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredModifyMessage);
+            await Context.Interaction.SendResponseAsync(InteractionCallback.ModifyMessage(options =>
+            {
+                var currentComponents = Context.Interaction.Message?.Components ?? [];
+                var existingButtons = currentComponents.OfType<ActionRow>().First().Components.OfType<Button>().ToList();
+                var newButtons = existingButtons.Select(button => new ButtonProperties(button.CustomId, button.Label ?? "", button.Style).WithDisabled()).ToList();
+                options.WithComponents([new ActionRowProperties().WithComponents(newButtons)]);
+            }));
             
             var isInProgress = applicationService.HasApplicationInProgress(Context.User.Id);
             if (!isInProgress)
@@ -239,7 +245,13 @@ public class ApplyInteractions
         [ComponentInteraction("apply_user_info_modal")]
         public async Task HandleUserInfoSubmission()
         {
-            await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredModifyMessage);
+            await Context.Interaction.SendResponseAsync(InteractionCallback.ModifyMessage(options =>
+            {
+                var currentComponents = Context.Interaction.Message?.Components ?? [];
+                var existingButtons = currentComponents.OfType<ActionRow>().First().Components.OfType<Button>().ToList();
+                var newButtons = existingButtons.Select(button => new ButtonProperties(button.CustomId, button.Label ?? "", button.Style).WithDisabled()).ToList();
+                options.WithComponents([new ActionRowProperties().WithComponents(newButtons)]);
+            }));
             
             var isInProgress = applicationService.HasApplicationInProgress(Context.User.Id);
             if (!isInProgress)
@@ -286,7 +298,7 @@ public class ApplyInteractions
             }
 
             var usersFromSnowflakeResponse = await gfApiService.GetDiscordSnowflakesByMinecraftGuid(foundProfile!.Uuid);
-            if (!usersFromSnowflakeResponse.TryGetDataNonNull(out var snowflakes))
+            if (!usersFromSnowflakeResponse.TryGetDataNonNull(out var snowflakes) && usersFromSnowflakeResponse.StatusCode != HttpStatusCode.NotFound)
             {
                 application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.PersonalInformation] = false;
                 _ = Context.Interaction.ModifyResponseAsync(options => options
@@ -296,7 +308,7 @@ public class ApplyInteractions
                 return;
             }
             
-            if (snowflakes.Any(snowflake => snowflake != Context.User.Id))
+            if (snowflakes is not null && snowflakes.Any(snowflake => snowflake != Context.User.Id))
             {
                 application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.PersonalInformation] = false;
                 validationMessages.Add(UserWithThatAccountAlreadyExistsEmbed(foundProfile.Uuid));
@@ -322,7 +334,13 @@ public class ApplyInteractions
         [ComponentInteraction("apply_building_experience_modal")]
         public async Task HandleBuildingExperienceSubmission()
         {
-            await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredModifyMessage);
+            await Context.Interaction.SendResponseAsync(InteractionCallback.ModifyMessage(options =>
+            {
+                var currentComponents = Context.Interaction.Message?.Components ?? [];
+                var existingButtons = currentComponents.OfType<ActionRow>().First().Components.OfType<Button>().ToList();
+                var newButtons = existingButtons.Select(button => new ButtonProperties(button.CustomId, button.Label ?? "", button.Style).WithDisabled()).ToList();
+                options.WithComponents([new ActionRowProperties().WithComponents(newButtons)]);
+            }));
             
             var isInProgress = applicationService.HasApplicationInProgress(Context.User.Id);
             if (!isInProgress)
@@ -371,7 +389,13 @@ public class ApplyInteractions
         [ComponentInteraction("apply_closing_thoughts_modal")]
         public async Task HandleClosingThoughtsSubmission()
         {
-            await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredModifyMessage);
+            await Context.Interaction.SendResponseAsync(InteractionCallback.ModifyMessage(options =>
+            {
+                var currentComponents = Context.Interaction.Message?.Components ?? [];
+                var existingButtons = currentComponents.OfType<ActionRow>().First().Components.OfType<Button>().ToList();
+                var newButtons = existingButtons.Select(button => new ButtonProperties(button.CustomId, button.Label ?? "", button.Style).WithDisabled()).ToList();
+                options.WithComponents([new ActionRowProperties().WithComponents(newButtons)]);
+            }));
             
             var isInProgress = applicationService.HasApplicationInProgress(Context.User.Id);
             if (!isInProgress)
@@ -412,7 +436,13 @@ public class ApplyInteractions
         [ComponentInteraction("apply_final_submit_modal")]
         public async Task HandleFinalSubmission()
         {
-            await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredModifyMessage);
+            await Context.Interaction.SendResponseAsync(InteractionCallback.ModifyMessage(options =>
+            {
+                var currentComponents = Context.Interaction.Message?.Components ?? [];
+                var existingButtons = currentComponents.OfType<ActionRow>().First().Components.OfType<Button>().ToList();
+                var newButtons = existingButtons.Select(button => new ButtonProperties(button.CustomId, button.Label ?? "", button.Style).WithDisabled()).ToList();
+                options.WithComponents([new ActionRowProperties().WithComponents(newButtons)]);
+            }));
             
             var isInProgress = applicationService.HasApplicationInProgress(Context.User.Id);
             if (!isInProgress)

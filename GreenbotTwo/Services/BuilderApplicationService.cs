@@ -141,7 +141,7 @@ public class BuilderApplicationService(IOptions<BuilderApplicationSettings> opti
             var appSummary = await BuildApplicationSummary(discordSnowflake, appToForward);
             var applicationMessage = await restClient.SendMessageAsync(forwardChannelId,
                 new MessageProperties()
-                    .WithComponents([appSummary.WithAccentColor(new Color(50, 127, 168))])
+                    .WithComponents([appSummary.WithAccentColor(ColorHelpers.Info)])
                     .WithFlags(MessageFlags.IsComponentsV2)
             );
 
@@ -182,7 +182,7 @@ public class BuilderApplicationService(IOptions<BuilderApplicationSettings> opti
             var denialEmbed = new EmbedProperties()
                 .WithTitle("About your application...")
                 .WithDescription(
-                    $"Thank you for taking interest in joining The Greenfield Project. Unfortunately, we regret to inform you that your application was not approved. This could have been due to various reasons - we have outlined some of (if not all) of the reasons below.\n\n{reason}")
+                    $"Thank you for taking interest in joining The Greenfield Project. Unfortunately, we regret to inform you that your application was not approved. This could have been due to various reasons - we have outlined some of (if not all) of the reasons below:\n\n{reason}")
                 .WithColor(ColorHelpers.Failure);
 
             var dmChannelTask = restClient.GetDMChannelAsync(discordSnowflake);

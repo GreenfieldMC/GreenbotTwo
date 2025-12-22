@@ -28,29 +28,6 @@ public class BuilderApplicationForm(ulong discordId)
     {
         return SectionsCompleted.All(section => section.Value);
     }
-
-    public EmbedProperties GenerateApplicationEmbeds(long applicationId)
-    {
-        var embedFields = new List<EmbedFieldProperties>();
-        embedFields.Add(new EmbedFieldProperties().WithName("**__Discord__**").WithValue($"<@{DiscordId}>").WithInline());
-        embedFields.Add(new EmbedFieldProperties().WithName("**__Minecraft Username__**").WithValue(MinecraftProfile != null ? $"`{MinecraftProfile.Name}`" : "There was no profile found.").WithInline());
-        embedFields.Add(new EmbedFieldProperties().WithName("**__Age__**").WithValue($"`{Age}`").WithInline());
-        if (!string.IsNullOrWhiteSpace(Nationality)) embedFields.Add(new EmbedFieldProperties().WithName("**__Nationality__**").WithValue($"`{Nationality}`").WithInline());
-        embedFields.Add(new EmbedFieldProperties().WithName($"~~{string.Concat(Enumerable.Repeat(" ", 157))}~~").WithValue(""));
-        embedFields.Add(new EmbedFieldProperties().WithName("**__Why do you want to be a part of Greenfield?__**").WithValue(!string.IsNullOrWhiteSpace(WhyJoinGreenfield) ? WhyJoinGreenfield : "Not Provided"));
-        embedFields.Add(new EmbedFieldProperties().WithName($"~~{string.Concat(Enumerable.Repeat(" ", 157))}~~").WithValue(""));
-        if (!string.IsNullOrWhiteSpace(AdditionalBuildingInformation)) embedFields.Add(new EmbedFieldProperties().WithName("**__Additional information about your supplied builds__**").WithValue(AdditionalBuildingInformation!));
-        if (!string.IsNullOrWhiteSpace(AdditionalComments)) embedFields.Add(new EmbedFieldProperties().WithName("**__Additional Comments__**").WithValue(AdditionalComments!));
-        
-        return new EmbedProperties()
-            .WithTitle($"Builder Application #{applicationId}")
-            .WithFields(embedFields)
-            .WithColor(new Color(50, 127, 168))
-            .WithFooter(new EmbedFooterProperties()
-                .WithText($"Minecraft UUID: `{MinecraftProfile?.Uuid.ToString() ?? "N/A"}`"));
-            
-            
-    }
     
     public IEnumerable<ButtonProperties> GenerateButtonsForApplication()
     {
