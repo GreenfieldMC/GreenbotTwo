@@ -1,6 +1,6 @@
 namespace GreenbotTwo.Models;
 
-public class MinecraftSlimProfile(string id, string name)
+public class MinecraftProfile(string id, string name)
 {
 
     public string Id
@@ -11,7 +11,7 @@ public class MinecraftSlimProfile(string id, string name)
     public Guid Uuid { get; set; }
     public string Name { get; set; } = name;
 
-    public MinecraftSlimProfile() : this(Guid.Empty.ToString(), string.Empty)
+    public MinecraftProfile() : this(Guid.Empty.ToString(), string.Empty)
     {
     }
 }

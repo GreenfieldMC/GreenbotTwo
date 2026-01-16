@@ -1,14 +1,17 @@
 using GreenbotTwo.Models;
+using GreenbotTwo.Models.Forms;
+using GreenbotTwo.Models.GreenfieldApi;
+using NetCord;
 using NetCord.Rest;
+using Application = GreenbotTwo.Models.GreenfieldApi.Application;
+using User = GreenbotTwo.Models.GreenfieldApi.User;
 
 namespace GreenbotTwo.Services.Interfaces;
 
 /// <summary>
-/// Service for managing user applications.
+/// Service for managing user build applications.
 /// </summary>
-/// <typeparam name="TForm">The application form before submission.</typeparam>
-/// <typeparam name="TSubmitted">The submitted application type.</typeparam>
-public interface IApplicationService<TForm, in TSubmitted>
+public interface IApplicationService
 {
     
     /// <summary>
@@ -22,14 +25,15 @@ public interface IApplicationService<TForm, in TSubmitted>
     /// Get all applications that are currently in progress (not submitted yet).
     /// </summary>
     /// <returns></returns>
-    IEnumerable<TForm> GetInProgressApplications();
+    IEnumerable<BuilderApplicationForm> GetInProgressApplications();
 
     /// <summary>
     /// Get or start an application for the given discord user. If there is an active (not submitted) application already, it will be returned instead. If the user has a submitted application, this will return null.
     /// </summary>
     /// <param name="discordId">The discord user who is applying</param>
+    /// <param name="user">The user object associated with the discord user. This is required if the application has to be started.</param>
     /// <returns></returns>
-    Task<Result<TForm>> GetOrStartApplication(ulong discordId);
+    Task<Result<BuilderApplicationForm>> GetOrStartApplication(ulong discordId, User? user = null);
     
     /// <summary>
     /// Check if a discord user has an application that is in progress (not submitted yet).
@@ -46,18 +50,21 @@ public interface IApplicationService<TForm, in TSubmitted>
     Task<Result<bool>> HasApplicationUnderReview(ulong discordId);
 
     /// <summary>
-    /// Submit an application for the given discord user.
+    /// Submit an application for the given discord user. The application will be marked as "SubmissionPending" until it is successfully forwarded for review.
     /// </summary>
     /// <param name="discordId">The discord user who is submitting the application</param>
     /// <returns>True if the application was successfully submitted; false otherwise.</returns>
     Task<Result<long>> SubmitApplication(ulong discordId);
 
     /// <summary>
-    /// Get an application by its ID.
+    /// Completes an application submission by uploading the images and forwarding the application to review. Also sets the application's status to "UnderReview".
+    /// 
+    /// NOTE: The application must be in the "SubmissionPending" status to be processed.
     /// </summary>
-    /// <param name="applicationId"></param>
+    /// <param name="discordSnowflake">The discord user who submitted the application</param>
+    /// <param name="appToForward">The application to complete and forward</param>
     /// <returns></returns>
-    Task<Result<BuilderApplication>> GetSubmittedApplicationById(long applicationId);
+    Task<Result> CompleteAndForwardApplicationToReview(ulong discordSnowflake, Application appToForward);
 
     /// <summary>
     /// Build a summary of the application to be forwarded for review as a component container.
@@ -65,18 +72,18 @@ public interface IApplicationService<TForm, in TSubmitted>
     /// <param name="discordSnowflake">The discord user who submitted the application</param>
     /// <param name="appToForward">The application to build the summary for</param>
     /// <param name="includeButtons">Whether to include action buttons in the summary</param>
-    /// <param name="onlyShowBasicInfo"></param>
+    /// <param name="onlyShowBasicInfo">Whether to only show basic information in the summary</param>>
+    /// <param name="overrideImages">When uploading the images for the first time, they need to be attached like attachments rather than regular links.</param>
     /// <returns></returns>
-    Task<ComponentContainerProperties> BuildApplicationSummary(ulong discordSnowflake, TSubmitted appToForward,
-        bool includeButtons = true, bool onlyShowBasicInfo = false);
-
-    /// <summary>
-    /// Forward the given application to review.
-    /// </summary>
-    /// <param name="discordSnowflake">The discord user who submitted the application</param>
-    /// <param name="appToForward">The application to forward to review</param>
-    /// <returns>>True if the application was successfully forwarded; false otherwise.</returns>
-    Task<Result<bool>> ForwardApplicationToReview(ulong discordSnowflake, TSubmitted appToForward);
+    Task<ComponentContainerProperties> BuildApplicationSummary(ulong discordSnowflake, Application appToForward, bool includeButtons = true, bool onlyShowBasicInfo = false, List<ApplicationImage>? overrideImages = null);
+    //
+    // /// <summary>
+    // /// Forward the given application to review.
+    // /// </summary>
+    // /// <param name="discordSnowflake">The discord user who submitted the application</param>
+    // /// <param name="appToForward">The application to forward to review</param>
+    // /// <returns>>True if the application was successfully forwarded; false otherwise.</returns>
+    // Task<Result<bool>> ForwardApplicationToReview(ulong discordSnowflake, TSubmitted appToForward);
 
     /// <summary>
     /// Deny the given application.
@@ -85,7 +92,7 @@ public interface IApplicationService<TForm, in TSubmitted>
     /// <param name="appToDeny">The application to deny</param>
     /// <param name="reason">The reason for the denial</param>
     /// <returns></returns>
-    Task<Result<ulong>> DenyApplication(ulong discordSnowflake, TSubmitted appToDeny, string reason);
+    Task<Result<ulong>> DenyApplication(ulong discordSnowflake, Application appToDeny, string reason);
 
     /// <summary>
     /// Accept the given application.
@@ -94,6 +101,6 @@ public interface IApplicationService<TForm, in TSubmitted>
     /// <param name="appToAccept">The application to accept</param>
     /// <param name="comments">Optional comments to save in the application database.</param>
     /// <returns></returns>
-    Task<Result<ulong>> AcceptApplication(ulong discordSnowflake, TSubmitted appToAccept, string? comments);
+    Task<Result<ulong>> AcceptApplication(ulong discordSnowflake, Application appToAccept, string? comments);
 
 }

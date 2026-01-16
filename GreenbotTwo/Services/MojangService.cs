@@ -17,24 +17,24 @@ public class MojangService : IMojangService
         
     }
     
-    public async Task<Result<MinecraftSlimProfile>> GetMinecraftProfileByUsername(string username)
+    public async Task<Result<MinecraftProfile>> GetMinecraftProfileByUsername(string username)
     {
         try
         {
             var response = await _httpClient.GetAsync($"/users/profiles/minecraft/{username}");
             if (!response.IsSuccessStatusCode) 
-                return Result<MinecraftSlimProfile>.Failure($"Failed to fetch Minecraft profile for username '{username}'. Status code: {response.StatusCode}");
+                return Result<MinecraftProfile>.Failure($"Failed to fetch Minecraft profile for username '{username}'. Status code: {response.StatusCode}");
             
             var contentStream = await response.Content.ReadAsStreamAsync();
-            var profile = await JsonSerializer.DeserializeAsync<MinecraftSlimProfile>(contentStream, JsonOptions);
+            var profile = await JsonSerializer.DeserializeAsync<MinecraftProfile>(contentStream, JsonOptions);
             
             return profile == null 
                 ? throw new Exception("Profile could not be deserialized from response.") 
-                : Result<MinecraftSlimProfile>.Success(profile);
+                : Result<MinecraftProfile>.Success(profile);
         }
         catch (Exception e)
         {
-            return Result<MinecraftSlimProfile>.Failure($"An error occurred while fetching the Minecraft profile for username '{username}': {e.Message}", HttpStatusCode.InternalServerError);
+            return Result<MinecraftProfile>.Failure($"An error occurred while fetching the Minecraft profile for username '{username}': {e.Message}", HttpStatusCode.InternalServerError);
         }
     }
 }

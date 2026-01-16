@@ -3,28 +3,13 @@ using System.Net;
 
 namespace GreenbotTwo.Services;
 
-public class Result<T>
+public class Result<T> : Result
 {
     
     /// <summary>
     /// The data returned from the operation. Default if the operation failed.
     /// </summary>
     public required T? Data { get; set; }
-    
-    /// <summary>
-    /// Indicates whether the operation was successful. Under normal usage, a failed operation is one that throws an Exception and fails to return a result.
-    /// </summary>
-    public required bool IsSuccessful { get; set; }
-    
-    /// <summary>
-    /// The error message if the operation failed. Null if the operation was successful.
-    /// </summary>
-    public required string? ErrorMessage { get; set; }
-
-    /// <summary>
-    /// The HTTP status code representing the result of the operation.
-    /// </summary>
-    public HttpStatusCode StatusCode { get; set; } = HttpStatusCode.OK;
     
     public static Result<T> Success(T data, HttpStatusCode statusCode = HttpStatusCode.OK) => new()
     {
@@ -34,30 +19,19 @@ public class Result<T>
         StatusCode = statusCode
     };
     
-    public static Result<T> Failure(string errorMessage, HttpStatusCode statusCode = HttpStatusCode.BadRequest) => new()
+    /// <summary>
+    /// Returns a failed Result with the provided error message and status code.
+    /// </summary>
+    /// <param name="errorMessage">The error message.</param>
+    /// <param name="statusCode">The HTTP status code. Defaults to BadRequest.</param>
+    /// <returns>A failed Result.</returns>
+    public new static Result<T> Failure(string errorMessage, HttpStatusCode statusCode = HttpStatusCode.BadRequest) => new()
     {
         Data = default,
         IsSuccessful = false,
         ErrorMessage = errorMessage,
         StatusCode = statusCode
     };
-    
-    /// <summary>
-    /// Returns the StatusCode as an integer.
-    /// </summary>
-    /// <returns></returns>
-    public int GetStatusCodeInt()
-    {
-        return (int)StatusCode;
-    }
-    
-    public void ThrowIfFailed()
-    {
-        if (!IsSuccessful)
-        {
-            throw new Exception(ErrorMessage);
-        }
-    }
     
     /// <summary>
     /// Returns true if the Data property is null.
@@ -119,6 +93,7 @@ public class Result<T>
     /// </summary>
     /// <param name="defaultValue">The default value to return if the operation was not successful.</param>
     /// <returns></returns>
+    [return: NotNullIfNotNull(nameof(defaultValue))]
     public T? GetOrDefault(T? defaultValue = default)
     {
         return !IsSuccessful ? defaultValue : Data;
@@ -129,7 +104,7 @@ public class Result<T>
     /// </summary>
     /// <param name="data">The output data if successful; default value otherwise. Null values possible.</param>
     /// <returns></returns>
-    public bool TryGetData(out T? data)
+    public bool TryGetData([NotNullIfNotNull(nameof(data))] out T? data)
     {
         if (IsSuccessful)
         {
@@ -157,5 +132,65 @@ public class Result<T>
         data = default!;
         return false;
     }
+}
+
+public class Result
+{
     
+    /// <summary>
+    /// Indicates whether the operation was successful. Under normal usage, a failed operation is one that throws an Exception and fails to return a result.
+    /// </summary>
+    public required bool IsSuccessful { get; set; }
+    
+    /// <summary>
+    /// The error message if the operation failed. Null if the operation was successful.
+    /// </summary>
+    public required string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// The HTTP status code representing the result of the operation.
+    /// </summary>
+    public required HttpStatusCode StatusCode { get; set; } = HttpStatusCode.OK;
+    
+    /// <summary>
+    /// Returns a successful Result with the provided status code.
+    /// </summary>
+    /// <param name="statusCode">The HTTP status code. Defaults to OK.</param>
+    /// <returns></returns>
+    public static Result Success(HttpStatusCode statusCode = HttpStatusCode.OK) => new()
+    {
+        IsSuccessful = true,
+        ErrorMessage = null,
+        StatusCode = statusCode
+    };
+    
+    /// <summary>
+    /// Returns a failed Result with the provided error message and status code.
+    /// </summary>
+    /// <param name="errorMessage">The error message.</param>
+    /// <param name="statusCode">>The HTTP status code. Defaults to BadRequest.</param>
+    /// <returns></returns>
+    public static Result Failure(string errorMessage, HttpStatusCode statusCode = HttpStatusCode.BadRequest) => new()
+    {
+        IsSuccessful = false,
+        ErrorMessage = errorMessage,
+        StatusCode = statusCode
+    };
+    
+    /// <summary>
+    /// Returns the StatusCode as an integer.
+    /// </summary>
+    /// <returns></returns>
+    public int GetStatusCodeInt()
+    {
+        return (int)StatusCode;
+    }
+    
+    public void ThrowIfFailed()
+    {
+        if (!IsSuccessful)
+        {
+            throw new Exception(ErrorMessage);
+        }
+    }
 }

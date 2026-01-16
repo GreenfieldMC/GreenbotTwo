@@ -16,6 +16,7 @@ public class BuilderApplicationSettings : IValidateOptions<BuilderApplicationSet
     public required int MaximumWhyJoinLength { get; init; }
     public required int MaximumAdditionalBuildingInfoLength { get; init; }
     public required int MaximumAdditionalCommentsLength { get; init; }
+    public required long MaximumPerFileSizeBytes { get; init; }
     
     public ValidateOptionsResult Validate(string? name, BuilderApplicationSettings options)
     {
@@ -28,10 +29,23 @@ public class BuilderApplicationSettings : IValidateOptions<BuilderApplicationSet
         if (options.MaximumNumberOfOtherImages < options.MinimumNumberOfOtherImages) failures.Add("MaximumNumberOfOtherImages cannot be less than MinimumNumberOfOtherImages.");
         if (options.MinimumNumberOfOtherImages > 10 || options.MaximumNumberOfOtherImages > 10) failures.Add("Number of other images cannot exceed 10.");
         
+        if (options.MinimumNumberOfHouseImages + options.MinimumNumberOfOtherImages > 10) failures.Add("The combined minimum number of images cannot exceed 10.");
+        if (options.MaximumNumberOfHouseImages + options.MaximumNumberOfOtherImages > 10) failures.Add("The combined maximum number of images cannot exceed 10.");
+        
         var freeformTextLength = options.MaximumWhyJoinLength + options.MaximumAdditionalBuildingInfoLength + options.MaximumAdditionalCommentsLength;
         if (freeformTextLength > 3000) failures.Add("The combined length of freeform text fields cannot exceed 3000 characters.");
         
         return failures.Count > 0 ? ValidateOptionsResult.Fail(failures) : ValidateOptionsResult.Success;
+    }
+
+    public string GetMaxFileSizeNice()
+    {
+        return MaximumPerFileSizeBytes switch
+        {
+            >= 1 << 20 => $"{MaximumPerFileSizeBytes / (1 << 20)} MB",
+            >= 1 << 10 => $"{MaximumPerFileSizeBytes / (1 << 10)} KB",
+            _ => $"{MaximumPerFileSizeBytes} Bytes"
+        };
     }
     
 }

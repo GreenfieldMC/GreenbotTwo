@@ -3,8 +3,9 @@ using GreenbotTwo.Configuration.Models;
 using GreenbotTwo.Configuration.Models.Commands;
 using GreenbotTwo.Configuration.Models.Endpoints;
 using GreenbotTwo.Interactions;
+using GreenbotTwo.Interactions.AccountLink;
 using GreenbotTwo.Interactions.BuildApplications;
-using GreenbotTwo.Models;
+using GreenbotTwo.Models.Forms;
 using GreenbotTwo.Services;
 using GreenbotTwo.Services.Credentials;
 using GreenbotTwo.Services.Interfaces;
@@ -17,6 +18,7 @@ using NetCord.Hosting.Rest;
 using NetCord.Hosting.Services.ApplicationCommands;
 using NetCord.Hosting.Services.ComponentInteractions;
 using NetCord.Services.ComponentInteractions;
+using Application = GreenbotTwo.Models.GreenfieldApi.Application;
 
 namespace GreenbotTwo;
 
@@ -62,7 +64,8 @@ public static class StartupExtensions
     internal static IServiceCollection ConfigureServices(this IServiceCollection services)
     {
         services.AddTransient<OAuthClientCredentialsHandler>();
-        services.AddTransient<IApplicationService<BuilderApplicationForm, BuilderApplication>, BuilderApplicationService>();
+        services.AddTransient<IApplicationService, ApplicationService>();
+        services.AddTransient<IAccountLinkService, AccountLinkService>();
         return services;
     }
     
@@ -84,6 +87,10 @@ public static class StartupExtensions
         {
             client.BaseAddress = new Uri(apiEndpointSettings.MojangApi.BaseAddress);
         });
+        services.AddHttpClient<IAuthenticationHubService, AuthenticationHubService>(client =>
+        {
+            client.BaseAddress = new Uri(apiEndpointSettings.AuthenticationHubApi.BaseAddress);
+        });
         return services;
     }
 
@@ -99,7 +106,8 @@ public static class StartupExtensions
             .AddDiscordGateway()
             .AddApplicationCommands()
             .AddComponentInteractions<ButtonInteraction, ButtonInteractionContext>()
-            .AddComponentInteractions<ModalInteraction, ModalInteractionContext>();
+            .AddComponentInteractions<ModalInteraction, ModalInteractionContext>()
+            .AddComponentInteractions<StringMenuInteraction, StringMenuInteractionContext>();
         
         return services;
     }
@@ -115,6 +123,7 @@ public static class StartupExtensions
         app.AddApplicationCommandModule<CodesCommand>();
         app.AddApplicationCommandModule<BetapackCommand>();
         app.AddApplicationCommandModule<ApplyCommand>();
+        app.AddApplicationCommandModule<AccountsCommand>();
         
         return app;
     }
@@ -130,6 +139,10 @@ public static class StartupExtensions
         app.AddComponentInteractionModule<ButtonInteractionContext, ReviewInteractions.ReviewButtonInteractions>();
         app.AddComponentInteractionModule<ModalInteractionContext, ApplyInteractions.ApplyModalInteractions>();
         app.AddComponentInteractionModule<ModalInteractionContext, ReviewInteractions.ReviewModalInteractions>();
+        app.AddComponentInteractionModule<StringMenuInteractionContext, ApplyInteractions.ApplyUserSelectionInteractions>();
+        app.AddComponentInteractionModule<ButtonInteractionContext, AccountLinkInteractions.AccountLinkButtonInteractions>();
+        app.AddComponentInteractionModule<ModalInteractionContext, AccountLinkInteractions.AuthCodeModalInteractions>();
+        app.AddComponentInteractionModule<StringMenuInteractionContext, AccountLinkInteractions.AccountLinkSelectUserInteractions>();
         
         return app;
     }

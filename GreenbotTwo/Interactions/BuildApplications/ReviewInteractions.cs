@@ -30,7 +30,7 @@ public class ReviewInteractions
     public static readonly Func<long, EmbedProperties> CallbackBadRejectionComment = (appId) => 
         GenericEmbeds.UserError("Greenfield Application Service", $"No rejection reason was provided for rejecting application Id `{appId}`. Please provide at least one reason before rejecting.");
     
-    public class ReviewButtonInteractions(IApplicationService<BuilderApplicationForm, BuilderApplication> applicationService, IGreenfieldApiService gfApiService) : ComponentInteractionModule<ButtonInteractionContext>
+    public class ReviewButtonInteractions(IGreenfieldApiService gfApiService) : ComponentInteractionModule<ButtonInteractionContext>
     {
         
         [ComponentInteraction("button_does_nothing")]
@@ -49,23 +49,22 @@ public class ReviewInteractions
                 return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([CallbackUnableToParseAppId(appIdString)]));
             
             
-            var actualApplicationResult = await applicationService.GetSubmittedApplicationById(appId);
+            var actualApplicationResult = await gfApiService.GetApplicationById(appId);
             if (!actualApplicationResult.TryGetDataNonNull(out var application))
                 return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([CallbackApplicationNotFound(appId)]));
             
             
-            var discordUsersResult = await gfApiService.GetDiscordSnowflakesByUserId(application.User.UserId);
-            if (!discordUsersResult.TryGetDataNonNull(out var discordUsersEnumerable))
+            var discordUsersResult = await gfApiService.GetDiscordAccountsForUser(application.UserId);
+            if (!discordUsersResult.TryGetDataNonNull(out var discordUsers))
                 return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([CallbackDiscordUserNotFound(appId, discordUsersResult.ErrorMessage)]));
 
-            var discordUsers = discordUsersEnumerable.ToList();
             if (discordUsers.Count == 0)
                 return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([CallbackNoDiscordUserAssociated(appId)]));
 
             IEnumerable<IModalComponentProperties> modalComponents;
             var userMenuComponent = new UserMenuProperties("selected_discord_account")
                 .WithPlaceholder("Select a Discord account")
-                .WithDefaultValues(discordUsers)
+                .WithDefaultValues(discordUsers.Select(u => u.DiscordSnowflake))
                 .WithMaxValues(1)
                 .WithMinValues(1);
             var additionalComments = new LabelProperties("Additional Comments", new TextInputProperties("additional_comments", TextInputStyle.Paragraph)
@@ -100,16 +99,15 @@ public class ReviewInteractions
                 return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([CallbackUnableToParseAppId(appIdString)]));
             
             
-            var actualApplicationResult = await applicationService.GetSubmittedApplicationById(appId);
+            var actualApplicationResult = await gfApiService.GetApplicationById(appId);
             if (!actualApplicationResult.TryGetDataNonNull(out var application))
                 return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([CallbackApplicationNotFound(appId)]));
             
             
-            var discordUsersResult = await gfApiService.GetDiscordSnowflakesByUserId(application.User.UserId);
-            if (!discordUsersResult.TryGetDataNonNull(out var discordUserEnumerable))
+            var discordUsersResult = await gfApiService.GetDiscordAccountsForUser(application.UserId);
+            if (!discordUsersResult.TryGetDataNonNull(out var discordUsers))
                 return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([CallbackDiscordUserNotFound(appId, discordUsersResult.ErrorMessage)]));
             
-            var discordUsers = discordUserEnumerable.ToList();
             if (discordUsers.Count == 0)
                 return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([CallbackNoDiscordUserAssociated(appId)]));
             
@@ -127,7 +125,7 @@ public class ReviewInteractions
             
             var userMenuComponent = new UserMenuProperties("selected_discord_account")
                 .WithPlaceholder("Select a Discord account")
-                .WithDefaultValues(discordUsers)
+                .WithDefaultValues(discordUsers.Select(u => u.DiscordSnowflake))
                 .WithMaxValues(1)
                 .WithMinValues(1);
             
@@ -159,7 +157,7 @@ public class ReviewInteractions
         
     }
     
-    public class ReviewModalInteractions(IApplicationService<BuilderApplicationForm, BuilderApplication> applicationService, IGreenfieldApiService gfApiService, RestClient restClient) : ComponentInteractionModule<ModalInteractionContext>
+    public class ReviewModalInteractions(IApplicationService applicationService, IGreenfieldApiService gfApiService, RestClient restClient) : ComponentInteractionModule<ModalInteractionContext>
     {
         
         [ComponentInteraction("buildapp_approve_modal")]
@@ -176,7 +174,7 @@ public class ReviewInteractions
                 return;
             }
             
-            var actualApplicationResult = await applicationService.GetSubmittedApplicationById(appId);
+            var actualApplicationResult = await gfApiService.GetApplicationById(appId);
             if (!actualApplicationResult.TryGetDataNonNull(out var application))
             {
                 _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties().WithEmbeds([CallbackApplicationNotFound(appId)]));
@@ -233,7 +231,7 @@ public class ReviewInteractions
                 return;
             }
 
-            var actualApplicationResult = await applicationService.GetSubmittedApplicationById(appId);
+            var actualApplicationResult = await gfApiService.GetApplicationById(appId);
             if (!actualApplicationResult.TryGetDataNonNull(out var application))
             {
                 _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties().WithEmbeds([CallbackApplicationNotFound(appId)]).WithFlags(MessageFlags.Ephemeral));

@@ -4,18 +4,23 @@ using GreenbotTwo.Configuration.Models;
 using GreenbotTwo.Embeds;
 using GreenbotTwo.Extensions;
 using GreenbotTwo.Models;
+using GreenbotTwo.Models.Forms;
+using GreenbotTwo.Models.GreenfieldApi;
 using GreenbotTwo.Services;
 using GreenbotTwo.Services.Interfaces;
 using Microsoft.Extensions.Options;
 using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ComponentInteractions;
+using Application = GreenbotTwo.Models.GreenfieldApi.Application;
 
 namespace GreenbotTwo.Interactions.BuildApplications;
 
 public class ApplyInteractions
 {
 
+    public const string ApplicationUserSelectionButton = "select_user_for_application";
+    
     public static readonly EmbedProperties ApplicationStartEmbed = GenericEmbeds.Info("Greenfield Application Service",
         "Hi! Welcome to Greenfield, and thank you for considering becoming a build member! Please complete all sections of the application by clicking the buttons below and filling out each required form.\n\nIf you have any questions or concerns about the application process, please ask a Staff member for assistance. Your progress before final submission (except for image uploads) will be saved.\n\nGood Luck!");
     public static readonly EmbedProperties ApplicationSubmitEmbed = GenericEmbeds.Success("Greenfield Application Service",
@@ -32,6 +37,8 @@ public class ApplyInteractions
         "The age you provided is not a valid number. Please ensure you have entered it correctly and try again.");
     public static readonly Func<string, EmbedProperties> InvalidFileAttachmentEmbed = fileName => GenericEmbeds.UserError("Validation Error",
         $"The attachment `{fileName}` is not a valid image file. Please provide only image files to showcase your building experience.");
+    public static readonly Func<string, EmbedProperties> FileTooLargeAttachmentEmbed = fileName => GenericEmbeds.UserError("Validation Error",
+        $"The attachment `{fileName}` exceeds the maximum allowed size of 10MB. Please provide smaller image files to showcase your building experience.");
     public static readonly EmbedProperties InvalidWhyJoinEmbed = GenericEmbeds.UserError("Validation Error",
         "You must provide a reason for why you want to join the Greenfield Build Team to proceed with your application. Please try again.");
     public static readonly EmbedProperties ApplicationSubmitWhenIncompleteFailureEmbed = GenericEmbeds.InternalError("Internal Application Error", 
@@ -50,14 +57,70 @@ public class ApplyInteractions
         $"The Minecraft account associated with the username you provided is already linked to another Discord account. You may be on the wrong Discord account, or the Minecraft account may be shared with another user who uses a different Discord account. If you believe this is an error, please contact an Administrator to clear the Discord accounts linked with UUID: `{accountUuid}`.");
     public static readonly EmbedProperties FailedToDetermineLinkedAccountsEmbed = GenericEmbeds.InternalError("Internal Application Error",
         "An internal error occurred while trying to determine if your Minecraft account is already linked to another Discord account. Please try again later.");
+    public static readonly EmbedProperties UserNotFound = GenericEmbeds.UserError("Greenfield Application Service",
+        "We were unable to find a user associated with the selected account. Please try again with a different user.");
+    public static readonly EmbedProperties ApplicationCurrentlyInProgress = GenericEmbeds.UserError("Greenfield Application Service",
+        "You already have an application in progress. Please complete your existing application before starting a new one.");
+    public static readonly EmbedProperties ApplicationUnderReview = GenericEmbeds.UserError("Greenfield Application Service",
+        "Your application is already under review. You cannot start a new one until the current application has been processed.");
+    
+    /// <summary>
+    /// When a user is selecting which account to use for their application.
+    /// </summary>
+    /// <param name="applicationService"></param>
+    /// <param name="gfApiService"></param>
+    public class ApplyUserSelectionInteractions(IApplicationService applicationService, IGreenfieldApiService gfApiService) : ComponentInteractionModule<StringMenuInteractionContext>
+    {
+        
+        [ComponentInteraction(ApplicationUserSelectionButton)]
+        public async Task UserSelectionButton()
+        {
+            await Context.Interaction.SendResponseAsync(InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([GenericEmbeds.Info("Greenfield Application Service", "Preparing your application...")]).WithFlags(MessageFlags.Ephemeral)));
+            
+            var isInProgress = applicationService.HasApplicationInProgress(Context.User.Id);
+            if (isInProgress)
+            {
+                await Context.Interaction.ModifyResponseAsync(options => options.WithComponents([]).WithEmbeds([ApplicationCurrentlyInProgress]).WithFlags(MessageFlags.Ephemeral));
+                return;
+            }
+            
+            var isUnderReviewResult = await applicationService.HasApplicationUnderReview(Context.User.Id);
+            if (!isUnderReviewResult.IsSuccessful || isUnderReviewResult.GetNonNullOrThrow())
+            {
+                await Context.Interaction.ModifyResponseAsync(options => options.WithComponents([]).WithEmbeds([ApplicationUnderReview]).WithFlags(MessageFlags.Ephemeral));
+                return;
+            }
+            
+            var selectedId = Context.SelectedValues.FirstOrDefault();
+
+            if (selectedId is null || string.IsNullOrWhiteSpace(selectedId) || !long.TryParse(selectedId, out var userId) || !(await gfApiService.GetUserById(userId)).TryGetDataNonNull(out var user))
+            {
+                await Context.Interaction.ModifyResponseAsync(options => options.WithComponents([]).WithEmbeds([UserNotFound]).WithFlags(MessageFlags.Ephemeral));
+                return;
+            }
+            
+            var applicationResult = await applicationService.GetOrStartApplication(Context.User.Id, user);
+            if (!applicationResult.TryGetDataNonNull(out var application))
+            {
+                await Context.Interaction.ModifyResponseAsync(options => options.WithComponents([]).WithEmbeds([UserNotFound]).WithFlags(MessageFlags.Ephemeral));
+                return;
+            }
+            
+            _ = Context.Interaction.ModifyResponseAsync(options => options
+                .WithEmbeds([ApplicationStartEmbed])
+                .WithComponents([new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())])
+                .WithFlags(MessageFlags.Ephemeral)
+            );
+        }
+    }
     
     /// <summary>
     /// These are all the buttons that make up the application process.
     /// </summary>
     /// <param name="applicationService"></param>
-    public class ApplyMessageButtonInteractions(IOptions<BuilderApplicationSettings> buildAppSettings, IApplicationService<BuilderApplicationForm, BuilderApplication> applicationService) : ComponentInteractionModule<ButtonInteractionContext>
+    public class ApplyMessageButtonInteractions(IOptions<BuilderApplicationSettings> buildAppSettings, IApplicationService applicationService, IGreenfieldApiService apiService, IAccountLinkService accountLinkService) : ComponentInteractionModule<ButtonInteractionContext>
     {
-
+        
         [ComponentInteraction("apply_terms")]
         public InteractionCallbackProperties TermsAndConditionsButton()
         {
@@ -94,10 +157,6 @@ public class ApplyInteractions
             
             var modal = new ModalProperties("apply_user_info_modal", "Section 2 - Personal Information")
                 .WithComponents([
-                    new LabelProperties("Minecraft Username", new TextInputProperties("apply_modal_username", TextInputStyle.Short)
-                            .WithMaxLength(16)
-                            .WithValue(application.MinecraftProfile?.Name))
-                        .WithDescription("You MUST have a valid Minecraft Java Edition license. Cracked versions are NOT permitted."),
                     new LabelProperties("Age", new TextInputProperties("apply_modal_age", TextInputStyle.Short)
                             .WithMaxLength(3)
                             .WithValue(application.Age == -1 ? null : application.Age.ToString()))
@@ -122,11 +181,11 @@ public class ApplyInteractions
             
             var modal = new ModalProperties("apply_building_experience_modal", "Section 3 - Building Experience")
                 .WithComponents([
-                    new TextDisplayProperties("Housing is a core aspect of any city. It is also one of the easiest ways for us to accurately gauge your building skills. Please provide some examples of houses __**you**__ have built **__in Minecraft__** that would fit into a typical North American city."),
+                    new TextDisplayProperties($"Housing is a core aspect of any city. It is also one of the easiest ways for us to accurately gauge your building skills. Please provide some examples of houses __**you**__ have built **__in Minecraft__** that would fit into a typical North American city. \n\n*Note: There is a {buildAppSettings.Value.GetMaxFileSizeNice()} limit per file.*"),
                     new LabelProperties("North American House Build(s)", new FileUploadProperties("apply_modal_house_builds")
                         .WithMinValues(buildAppSettings.Value.MinimumNumberOfHouseImages == 0 ? null : buildAppSettings.Value.MinimumNumberOfHouseImages)
                         .WithMaxValues(buildAppSettings.Value.MaximumNumberOfHouseImages)),
-                    new TextDisplayProperties("Optionally, you may also provide any other builds you have created in Minecraft that you feel best represent your ability to contribute to a large-scale city project like Greenfield."),
+                    new TextDisplayProperties($"Optionally, you may also provide any other builds you have created in Minecraft that you feel best represent your ability to contribute to a large-scale city project like Greenfield. \n\n*Note: There is a {buildAppSettings.Value.GetMaxFileSizeNice()} limit per file.*"),
                     new LabelProperties("Other Build(s)", new FileUploadProperties("apply_modal_other_builds")
                         .WithRequired(false)
                         .WithMinValues(buildAppSettings.Value.MinimumNumberOfOtherImages == 0 ? null : buildAppSettings.Value.MinimumNumberOfOtherImages)
@@ -192,7 +251,7 @@ public class ApplyInteractions
     /// <param name="applicationService"></param>
     /// <param name="mojangService"></param>
     /// <param name="restClient"></param>
-    public class ApplyModalInteractions(IApplicationService<BuilderApplicationForm, BuilderApplication> applicationService, IMojangService mojangService, RestClient restClient, IGreenfieldApiService gfApiService) : ComponentInteractionModule<ModalInteractionContext>
+    public class ApplyModalInteractions(IOptions<BuilderApplicationSettings> buildAppSettings, IApplicationService applicationService, IMojangService mojangService, RestClient restClient, IGreenfieldApiService gfApiService) : ComponentInteractionModule<ModalInteractionContext>
     {
         
         [ComponentInteraction("apply_terms_modal")]
@@ -272,48 +331,6 @@ public class ApplyInteractions
             
             var validationMessages = new List<EmbedProperties>();
             
-            var foundProfile = application.MinecraftProfile;
-            var username = Context.Components.FromLabel<TextInput>("apply_modal_username")!.Value;
-            if (foundProfile is null || !foundProfile.Name.Equals(username, StringComparison.OrdinalIgnoreCase))
-            {
-                if (string.IsNullOrWhiteSpace(username)) validationMessages.Add(InvalidMinecraftUsernameEmbed);
-                else
-                {
-                    var mojangProfileResult = await mojangService.GetMinecraftProfileByUsername(username);
-                    if (mojangProfileResult.TryGetData(out var profile)) foundProfile = profile;
-                    else
-                    {
-                        application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.PersonalInformation] = false;
-                        if (mojangProfileResult.GetStatusCodeInt() >= 500)
-                        {
-                            _ = Context.Interaction.ModifyResponseAsync(options => options
-                                .WithComponents([])
-                                .WithEmbeds([MinecraftUsernameValidationFailureEmbed(mojangProfileResult.ErrorMessage)])
-                            );
-                            return;
-                        }
-                        validationMessages.Add(InvalidMinecraftUsernameEmbed);
-                    }
-                }
-            }
-
-            var usersFromSnowflakeResponse = await gfApiService.GetDiscordSnowflakesByMinecraftGuid(foundProfile!.Uuid);
-            if (!usersFromSnowflakeResponse.TryGetDataNonNull(out var snowflakes) && usersFromSnowflakeResponse.StatusCode != HttpStatusCode.NotFound)
-            {
-                application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.PersonalInformation] = false;
-                _ = Context.Interaction.ModifyResponseAsync(options => options
-                    .WithComponents([])
-                    .WithEmbeds([FailedToDetermineLinkedAccountsEmbed])
-                );
-                return;
-            }
-            
-            if (snowflakes is not null && snowflakes.Any(snowflake => snowflake != Context.User.Id))
-            {
-                application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.PersonalInformation] = false;
-                validationMessages.Add(UserWithThatAccountAlreadyExistsEmbed(foundProfile.Uuid));
-            }
-            
             if (!int.TryParse(Context.Components.FromLabel<TextInput>("apply_modal_age")!.Value, out var ageNumber) || ageNumber <= 0)
             {
                 application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.PersonalInformation] = false;
@@ -321,7 +338,6 @@ public class ApplyInteractions
             }
 
             application.Age = ageNumber;
-            application.MinecraftProfile = foundProfile;
             application.Nationality = Context.Components.FromLabel<TextInput>("apply_modal_nationality")!.Value;
             application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.PersonalInformation] = validationMessages.Count == 0;
 
@@ -362,21 +378,40 @@ public class ApplyInteractions
             var validationMessages = new List<EmbedProperties>();
             
             var houseBuilds = Context.Components.FromLabel<FileUpload>("apply_modal_house_builds")!.Attachments.ToList();
-            foreach (var attachment in houseBuilds.Where(attachment => attachment.ContentType is null || !new ContentType(attachment.ContentType).MediaType.Contains("image/")))
+            foreach (var attachment in houseBuilds)
             {
-                application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.BuildingExperience] = false;
-                validationMessages.Add(InvalidFileAttachmentEmbed(attachment.FileName));
+                if (attachment.ContentType is null || !new ContentType(attachment.ContentType).MediaType.Contains("image/"))
+                {
+                    application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.BuildingExperience] = false;
+                    validationMessages.Add(InvalidFileAttachmentEmbed(attachment.FileName));
+                }
+                if (attachment.Size > buildAppSettings.Value.MaximumPerFileSizeBytes)
+                {
+                    application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.BuildingExperience] = false;
+                    validationMessages.Add(FileTooLargeAttachmentEmbed(attachment.FileName));
+                }
             }
             
             var otherBuilds = Context.Components.FromLabel<FileUpload>("apply_modal_other_builds")!.Attachments.ToList();
-            foreach (var attachment in otherBuilds.Where(attachment => attachment.ContentType is null || !new ContentType(attachment.ContentType).MediaType.Contains("image/")))
+            foreach (var attachment in otherBuilds)
             {
-                application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.BuildingExperience] = false;
-                validationMessages.Add(InvalidFileAttachmentEmbed(attachment.FileName));
+                if (attachment.ContentType is null || !new ContentType(attachment.ContentType).MediaType.Contains("image/"))
+                {
+                    application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.BuildingExperience] = false;
+                    validationMessages.Add(InvalidFileAttachmentEmbed(attachment.FileName));
+                }
+                
+                if (attachment.Size > buildAppSettings.Value.MaximumPerFileSizeBytes)
+                {
+                    application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.BuildingExperience] = false;
+                    validationMessages.Add(FileTooLargeAttachmentEmbed(attachment.FileName));
+                }
             }
             
-            application.HouseBuildLinks = houseBuilds.Select(a => a.Url).ToList();
-            application.OtherBuildLinks = otherBuilds.Select(a => a.Url).ToList();
+            application.Images = houseBuilds
+                .Select(a => new BuilderApplicationImageUpload(a.Url, "TempHouse"))
+                .Concat(otherBuilds.Select(a => new BuilderApplicationImageUpload(a.Url, "TempOther")))
+                .ToList();
             application.AdditionalBuildingInformation = Context.Components.FromLabel<TextInput>("apply_modal_build_info")!.Value;
             application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.BuildingExperience] = validationMessages.Count == 0;
             
@@ -482,7 +517,7 @@ public class ApplyInteractions
                 return;
             }
             
-            var submittedAppResponse = await applicationService.GetSubmittedApplicationById(appId);
+            var submittedAppResponse = await gfApiService.GetApplicationById(appId);
             if (!submittedAppResponse.TryGetDataNonNull(out var submittedApplication))
             {
                 application.Submitted = false;
@@ -493,16 +528,18 @@ public class ApplyInteractions
                         .WithEmbeds([ApplicationStartEmbed, ErrorSubmittingApplicationEmbed(submitResult)]));
                 return;
             }
-
-            var forwardResult = await applicationService.ForwardApplicationToReview(application.DiscordId, submittedApplication);
-            if (!forwardResult.TryGetDataNonNull(out _))
-            {
-                application.Submitted = false;
-                _ = Context.Interaction.ModifyResponseAsync(options => options
-                    .WithComponents([new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())])
-                    .WithEmbeds([ApplicationStartEmbed, ErrorForwardingApplicationEmbed(forwardResult)]));
-                return;
-            }
+            
+            _ = applicationService.CompleteAndForwardApplicationToReview(Context.User.Id, submittedApplication);
+            
+            // var forwardResult = await applicationService.ForwardApplicationToReview(application.DiscordId, submittedApplication);
+            // if (!forwardResult.TryGetDataNonNull(out _))
+            // {
+            //     application.Submitted = false;
+            //     _ = Context.Interaction.ModifyResponseAsync(options => options
+            //         .WithComponents([new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())])
+            //         .WithEmbeds([ApplicationStartEmbed, ErrorForwardingApplicationEmbed(forwardResult)]));
+            //     return;
+            // }
             
             _ = Context.Interaction.ModifyResponseAsync(options =>
             {

@@ -1,9 +1,10 @@
 using NetCord;
 using NetCord.Rest;
+using User = GreenbotTwo.Models.GreenfieldApi.User;
 
-namespace GreenbotTwo.Models;
+namespace GreenbotTwo.Models.Forms;
 
-public class BuilderApplicationForm(ulong discordId)
+public class BuilderApplicationForm(User user, ulong discordId)
 {
     public Dictionary<ApplicationSections, bool> SectionsCompleted { get; set; } = new()
     {
@@ -14,12 +15,11 @@ public class BuilderApplicationForm(ulong discordId)
     };
 
     public bool Submitted { get; set; } = false;
+    public User User { get; set; } = user;
     public ulong DiscordId { get; set; } = discordId;
-    public MinecraftSlimProfile? MinecraftProfile { get; set; }
     public int Age { get; set; } = -1;
     public string? Nationality { get; set; }
-    public List<string> HouseBuildLinks { get; set; } = [];
-    public List<string> OtherBuildLinks { get; set; } = [];
+    public List<BuilderApplicationImageUpload> Images { get; set; } = [];
     public string? AdditionalBuildingInformation { get; set; }
     public string WhyJoinGreenfield { get; set; } = string.Empty;
     public string? AdditionalComments { get; set; }
@@ -99,3 +99,5 @@ public class BuilderApplicationForm(ulong discordId)
     }
     
 }
+
+public record BuilderApplicationImageUpload(string ImageLink, string ImageType);
