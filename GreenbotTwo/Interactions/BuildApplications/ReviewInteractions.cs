@@ -8,7 +8,7 @@ using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ComponentInteractions;
 
-namespace GreenbotTwo.Interactions;
+namespace GreenbotTwo.Interactions.BuildApplications;
 
 public class ReviewInteractions
 {

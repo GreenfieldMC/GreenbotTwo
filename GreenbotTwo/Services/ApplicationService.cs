@@ -28,21 +28,32 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
         return Applications.Values;
     }
 
-    public async Task<Result<BuilderApplicationForm>> GetOrStartApplication(ulong discordId, User? user = null)
+    public BuilderApplicationForm StartApplication(ulong discordSnowflake, User user)
     {
-        if (Applications.TryGetValue(discordId, out var application)) return Result<BuilderApplicationForm>.Success(application);
-        
-        if (user is null) 
-            return Result<BuilderApplicationForm>.Failure("No in-progress application found, and no user data provided to start a new application.", HttpStatusCode.InternalServerError);
-        
-        var activeAppResult = await HasApplicationUnderReview(discordId);
-        if (!activeAppResult.IsSuccessful) return Result<BuilderApplicationForm>.Failure(activeAppResult.ErrorMessage ?? "Failed to retrieve application status.", activeAppResult.StatusCode);
-        if (activeAppResult.GetNonNullOrThrow()) return Result<BuilderApplicationForm>.Failure("You already have an active application under review. You cannot start a new application until your current one has been reviewed.");
-        
-        application = new BuilderApplicationForm(user, discordId);
-        Applications[discordId] = application;
-        
-        return Result<BuilderApplicationForm>.Success(application);
+        var application = new BuilderApplicationForm(user, discordSnowflake);
+        Applications[discordSnowflake] = application;
+        return application;
+    }
+
+    public BuilderApplicationForm? GetApplication(ulong discordId)
+    {
+        return Applications.TryGetValue(discordId, out var application) 
+            ? application 
+            : null;
+
+        // if (Applications.TryGetValue(discordId, out var application)) return Result<BuilderApplicationForm>.Success(application);
+        //
+        // if (user is null) 
+        //     return Result<BuilderApplicationForm>.Failure("No in-progress application found, and no user data provided to start a new application.", HttpStatusCode.InternalServerError);
+        //
+        // var activeAppResult = await HasApplicationUnderReview(discordId);
+        // if (!activeAppResult.IsSuccessful) return Result<BuilderApplicationForm>.Failure(activeAppResult.ErrorMessage ?? "Failed to retrieve application status.", activeAppResult.StatusCode);
+        // if (activeAppResult.GetNonNullOrThrow()) return Result<BuilderApplicationForm>.Failure("You already have an active application under review. You cannot start a new application until your current one has been reviewed.");
+        //
+        // application = new BuilderApplicationForm(user, discordId);
+        // Applications[discordId] = application;
+        //
+        // return Result<BuilderApplicationForm>.Success(application);
     }
 
     public bool HasApplicationInProgress(ulong discordId)

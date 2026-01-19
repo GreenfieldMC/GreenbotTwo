@@ -28,12 +28,19 @@ public interface IApplicationService
     IEnumerable<BuilderApplicationForm> GetInProgressApplications();
 
     /// <summary>
-    /// Get or start an application for the given discord user. If there is an active (not submitted) application already, it will be returned instead. If the user has a submitted application, this will return null.
+    /// Start a new application for the given discord user. If an application is already in progress, it will be overwritten.
+    /// </summary>
+    /// <param name="discordSnowflake">The discord user who is applying</param>
+    /// <param name="user">The user object associated with the discord user.</param>
+    /// <returns></returns>
+    BuilderApplicationForm StartApplication(ulong discordSnowflake, User user);
+
+    /// <summary>
+    /// Get the in progress application for the given discord user.
     /// </summary>
     /// <param name="discordId">The discord user who is applying</param>
-    /// <param name="user">The user object associated with the discord user. This is required if the application has to be started.</param>
     /// <returns></returns>
-    Task<Result<BuilderApplicationForm>> GetOrStartApplication(ulong discordId, User? user = null);
+    BuilderApplicationForm? GetApplication(ulong discordId);
     
     /// <summary>
     /// Check if a discord user has an application that is in progress (not submitted yet).
