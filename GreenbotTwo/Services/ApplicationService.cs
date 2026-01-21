@@ -191,7 +191,7 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
                     appImg => appImg.AttachmentName, 
                     msgAtt => msgAtt.ImageName, 
                     (img, att) => 
-                        img.ApplicationImage with { Link = att.Url, ImageType = img.ApplicationImage.ImageType.Replace("Temp", "") })
+                        img.ApplicationImage with { Link = att.Url.Split("?")[0], ImageType = img.ApplicationImage.ImageType.Replace("Temp", "") })
                 .ToList();
             var updateImageTasks = attachmentsToUpdate.Select(img => gfApiService.UpdateApplicationImage(img.ImageLinkId, img.Link, img.ImageType)).ToList();
             var updateResults = await Task.WhenAll(updateImageTasks);

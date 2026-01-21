@@ -1,4 +1,5 @@
 using GreenbotTwo.Commands;
+using GreenbotTwo.Commands.ApplicationCommands;
 using GreenbotTwo.Configuration.Models;
 using GreenbotTwo.Configuration.Models.Commands;
 using GreenbotTwo.Configuration.Models.Endpoints;
@@ -124,7 +125,8 @@ public static class StartupExtensions
         app.AddApplicationCommandModule<BetapackCommand>();
         app.AddApplicationCommandModule<ApplyCommand>();
         app.AddApplicationCommandModule<AccountsCommand>();
-        
+        app.AddApplicationCommandModule<AppStatusCommand>();
+        app.AddApplicationCommandModule<ViewAppCommand>();
         return app;
     }
     

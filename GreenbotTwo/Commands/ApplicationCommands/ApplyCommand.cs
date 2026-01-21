@@ -7,20 +7,18 @@ using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
-namespace GreenbotTwo.Commands;
+namespace GreenbotTwo.Commands.ApplicationCommands;
 
 public class ApplyCommand(IApplicationService applicationService, IGreenfieldApiService apiService, IAccountLinkService accountLinkService) : ApplicationCommandModule<ApplicationCommandContext> 
 {
     
-    private static readonly EmbedProperties UserErrorNoLinkedAccountsEmbed = GenericEmbeds.UserError(
-        "Greenfield Application Service",
-        "There seem to be no Minecraft accounts linked to your Discord profile. Please run the `/accounts` command to link your accounts together before applying!"
-    );
+    private static readonly EmbedProperties InternalErrorGettingLinkedUsers = GenericEmbeds.InternalError("Greenfield Application Service",
+            "An internal error occurred while trying to fetch your linked accounts. Please try again later.");
     
     [SlashCommand("apply", "Apply to join the Greenfield team")]
     public async Task Apply()
     {
-        await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        await Context.Interaction.SendNotifyLoadingResponse(MessageFlags.Ephemeral);
 
         //if they have an application form actively being filled out, we should return that.
         var isAppInProgress = applicationService.HasApplicationInProgress(Context.User.Id);
@@ -29,13 +27,13 @@ public class ApplyCommand(IApplicationService applicationService, IGreenfieldApi
         if (!isAppInProgress)
         {
             var connectionWithUsersResponse = await apiService.GetUsersConnectedToDiscordAccount(Context.User.Id);
-            if (!connectionWithUsersResponse.TryGetDataNonNull(out var connectionWithUsers) || connectionWithUsers.Users.Count == 0)
+            if (!connectionWithUsersResponse.TryGetData(out var connectionWithUsers) && connectionWithUsersResponse.StatusCode != System.Net.HttpStatusCode.NotFound)
             {
-                await Context.Interaction.ModifyResponse([UserErrorNoLinkedAccountsEmbed]);
+                await Context.Interaction.ModifyResponse([InternalErrorGettingLinkedUsers]);
                 return;
             }
 
-            var users = connectionWithUsers.Users;
+            var users = connectionWithUsers?.Users ?? [];
             var selectionComponent = await accountLinkService.GenerateUserSelectionComponent(AccountLinkService.UserSelectionFor.Application, users);
             await Context.Interaction.ModifyResponse(components: [selectionComponent], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
             return;

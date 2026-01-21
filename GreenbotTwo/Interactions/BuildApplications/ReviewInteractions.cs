@@ -13,22 +13,31 @@ namespace GreenbotTwo.Interactions.BuildApplications;
 public class ReviewInteractions
 {
 
-    public static readonly Func<string, EmbedProperties> CallbackUnableToParseAppId = (summaryTitle) => 
+    #region InternalErrors
+
+    private static readonly Func<string, EmbedProperties> CallbackUnableToParseAppId = (summaryTitle) => 
         GenericEmbeds.InternalError("Internal Application Error", $"Unable to parse the application Id from application. See summary: `{summaryTitle}`");
-    public static readonly Func<long, EmbedProperties> CallbackApplicationNotFound = (appIdString) => 
+    private static readonly Func<long, EmbedProperties> CallbackApplicationNotFound = (appIdString) => 
         GenericEmbeds.InternalError("Internal Application Error", $"Unable to retrieve the application with Id `{appIdString}`.");
-    public static readonly Func<long, string?, EmbedProperties> CallbackDiscordUserNotFound = (appId, errorMessage) => 
+    private static readonly Func<long, string?, EmbedProperties> CallbackDiscordUserNotFound = (appId, errorMessage) => 
         GenericEmbeds.InternalError("Internal Application Error", $"Unable to retrieve Discord user associated with application Id `{appId}`. Error: {errorMessage}");
-    public static readonly Func<long, EmbedProperties> CallbackNoDiscordUserAssociated = (appId) =>
+    private static readonly Func<long, EmbedProperties> CallbackNoDiscordUserAssociated = (appId) =>
         GenericEmbeds.InternalError("Internal Application Error", $"No Discord user associated with application Id `{appId}`.");
-    public static readonly Func<long, EmbedProperties> CallbackNoDiscordAccountSelected = (appId) => 
+    private static readonly Func<long, EmbedProperties> CallbackNoDiscordAccountSelected = (appId) => 
         GenericEmbeds.InternalError("Internal Application Error", $"No Discord account was selected for application Id `{appId}`.");
-    public static readonly Func<long, string?, EmbedProperties> CallbackFailedToApproveApplication = (appId, errorMessage) => 
+    private static readonly Func<long, string?, EmbedProperties> CallbackFailedToApproveApplication = (appId, errorMessage) => 
         GenericEmbeds.InternalError("Internal Application Error", $"Failed to approve application Id `{appId}`. Error: {errorMessage}");
-    public static readonly Func<long, string?, EmbedProperties> CallbackFailedToRejectApplication = (appId, errorMessage) => 
+    private static readonly Func<long, string?, EmbedProperties> CallbackFailedToRejectApplication = (appId, errorMessage) => 
         GenericEmbeds.InternalError("Internal Application Error", $"Failed to reject application Id `{appId}`. Error: {errorMessage}");
-    public static readonly Func<long, EmbedProperties> CallbackBadRejectionComment = (appId) => 
+    
+    #endregion
+
+    #region UserErrors
+    
+    private static readonly Func<long, EmbedProperties> CallbackBadRejectionComment = (appId) => 
         GenericEmbeds.UserError("Greenfield Application Service", $"No rejection reason was provided for rejecting application Id `{appId}`. Please provide at least one reason before rejecting.");
+
+    #endregion
     
     public class ReviewButtonInteractions(IGreenfieldApiService gfApiService) : ComponentInteractionModule<ButtonInteractionContext>
     {

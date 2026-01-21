@@ -34,6 +34,27 @@ public static class InteractionExtensions
             if (components is not null) options.WithComponents(components);
         }));
     }
+
+    /// <summary>
+    /// Shows the user a loading state while the interaction defers the response to be sent later.
+    /// </summary>
+    /// <param name="interaction"></param>
+    /// <param name="flags"></param>
+    /// <returns></returns>
+    public static Task<InteractionCallbackResponse?> SendNotifyLoadingResponse(this IInteraction interaction, MessageFlags? flags = null)
+    {
+        return interaction.SendResponseAsync(InteractionCallback.DeferredMessage(flags));
+    }
+
+    /// <summary>
+    /// Does not show the user a loading state, tells discord that we will respond to the interaction later.
+    /// </summary>
+    /// <param name="interaction"></param>
+    /// <returns></returns>
+    public static Task<InteractionCallbackResponse?> SendModifyLaterResponse(this Interaction interaction)
+    {
+        return interaction.SendResponseAsync(InteractionCallback.DeferredModifyMessage);
+    }
     
     /// <summary>
     /// Modifies the already sent interaction response.
@@ -48,7 +69,7 @@ public static class InteractionExtensions
         {
             if (embeds is not null) options.WithEmbeds(embeds);
             if (components is not null) options.WithComponents(components);
-            if (flags is not null) options.WithFlags(flags.Value);
+            if (flags is not null) options.WithFlags(flags);
         });
     }
 }

@@ -115,10 +115,17 @@ public class AccountLinkService(IGreenfieldApiService apiService) : IAccountLink
             _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null)
         };
         
+        var noLinkedUsersMessage = mode switch
+        {
+            UserSelectionFor.AccountView => "You do not have any linked Minecraft accounts.",
+            UserSelectionFor.Application => "Thank you for taking interest in applying to our build team! Before continuing with the application, we need you to verify you have a valid Minecraft account and to link your current Discord account to that Minecraft account. Press the `Link a new Minecraft account` button to get started!",
+            _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null)
+        };
+        
         var container = new ComponentContainerProperties();
         if (users.Count == 0)
         {
-            container.AddComponents([new ComponentSectionProperties(new ButtonProperties("link_new_account", "Link a new Minecraft account", ButtonStyle.Primary), [new TextDisplayProperties("You do not have any linked Minecraft accounts.")])]);
+            container.AddComponents([new ComponentSectionProperties(new ButtonProperties("link_new_account", "Link a new Minecraft account", ButtonStyle.Primary), [new TextDisplayProperties(noLinkedUsersMessage)])]);
         }
         else
         {
@@ -127,7 +134,7 @@ public class AccountLinkService(IGreenfieldApiService apiService) : IAccountLink
                     .WithRequired()
                     .WithMaxValues(1)
                     .WithMinValues(1),
-                new ComponentSectionProperties(new ButtonProperties("link_new_account", "Link a new Minecraft account", ButtonStyle.Primary), [new TextDisplayProperties("Or link a new Minecraft account.")])
+                new ComponentSectionProperties(new ButtonProperties("link_new_account", "Link a new Minecraft account", ButtonStyle.Primary), [new TextDisplayProperties("Select an existing account to continue, or link a new Minecraft account.")])
             ]);
         }
         

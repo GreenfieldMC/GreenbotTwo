@@ -1,5 +1,6 @@
 using System.Net;
 using GreenbotTwo.Embeds;
+using GreenbotTwo.Extensions;
 using GreenbotTwo.Services;
 using GreenbotTwo.Services.Interfaces;
 using NetCord;
@@ -23,19 +24,13 @@ public class AccountsCommand(IGreenfieldApiService apiService, IAccountLinkServi
 
         if (!userResponse.TryGetData(out var connectionWithUsers) && userResponse.StatusCode != HttpStatusCode.NotFound)
         {
-            _ = Context.Interaction.SendResponseAsync(InteractionCallback.Message(new InteractionMessageProperties()
-                .WithEmbeds([FailedToFetchUsersEmbed])
-                .WithFlags(MessageFlags.Ephemeral))
-            );
+            await Context.Interaction.SendResponse([FailedToFetchUsersEmbed], MessageFlags.Ephemeral);
             return;
         }
 
         var component = await accountLinkService.GenerateUserSelectionComponent(AccountLinkService.UserSelectionFor.AccountView, connectionWithUsers?.Users ?? []);
         
-        _ = Context.Interaction.SendResponseAsync(InteractionCallback.Message(new InteractionMessageProperties()
-            .WithComponents([component])
-            .WithFlags(MessageFlags.Ephemeral | MessageFlags.IsComponentsV2))
-        );
+        await Context.Interaction.SendResponse(components: [component], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
     }
     
 }
