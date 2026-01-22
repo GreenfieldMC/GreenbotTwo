@@ -35,7 +35,7 @@ public interface IGreenfieldApiService
     /// <param name="newImageType"></param>
     /// <returns></returns>
     Task<Result> UpdateApplicationImage(long imageLinkId, string newImageUrl, string newImageType);
-    
+
     /// <summary>
     /// /application/{id}/status [POST]
     /// </summary>
@@ -43,7 +43,7 @@ public interface IGreenfieldApiService
     /// <param name="status"></param>
     /// <param name="statusMessage"></param>
     /// <returns></returns>
-    Task<Result<bool>> AddApplicationStatus(long applicationId, string status, string? statusMessage);
+    Task<Result<ApplicationStatus>> AddApplicationStatus(long applicationId, string status, string? statusMessage);
     
     /// <summary>
     /// /application/{id} [GET]

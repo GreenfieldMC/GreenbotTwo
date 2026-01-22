@@ -2,18 +2,20 @@ using System.Net;
 using System.Text.Json;
 using GreenbotTwo.Models;
 using GreenbotTwo.Services.Interfaces;
+using Microsoft.Extensions.Logging;
 
 namespace GreenbotTwo.Services;
 
 public class MojangService : IMojangService
 {
-
     private readonly HttpClient _httpClient;
+    private readonly ILogger<MojangService> _logger;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    
-    public MojangService(HttpClient httpClient)
+
+    public MojangService(ILogger<MojangService> logger, HttpClient httpClient)
     {
         _httpClient = httpClient;
+        _logger = logger;
         
     }
     
@@ -34,6 +36,7 @@ public class MojangService : IMojangService
         }
         catch (Exception e)
         {
+            _logger.LogError(e, "An error occurred while fetching the Minecraft profile for username '{Username}'", username);
             return Result<MinecraftProfile>.Failure($"An error occurred while fetching the Minecraft profile for username '{username}': {e.Message}", HttpStatusCode.InternalServerError);
         }
     }

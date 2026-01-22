@@ -90,7 +90,7 @@ public class ReviewInteractions
             else
                 modalComponents =
                 [
-                    new TextDisplayProperties($"You are about to approve the application for <@{discordUsers[0]}> (Application ID: {appId})."),
+                    new TextDisplayProperties($"You are about to approve the application for <@{discordUsers[0].DiscordSnowflake}> (Application ID: {appId})."),
                     new LabelProperties("Select Discord Account", userMenuComponent),
                     additionalComments
                 ];
@@ -154,7 +154,7 @@ public class ReviewInteractions
                 var additionalComponents = new List<IModalComponentProperties>
                 {
                     new TextDisplayProperties(
-                        $"You are about to reject the application for <@{discordUsers[0]}> (Application ID: {appId}). Please provide a reason for rejection below."),
+                        $"You are about to reject the application for <@{discordUsers[0].DiscordSnowflake}> (Application ID: {appId}). Please provide a reason for rejection below."),
                     new LabelProperties("Select Discord Account", userMenuComponent)
                 };
                 additionalComponents.AddRange(baseModalComponents);
@@ -201,7 +201,7 @@ public class ReviewInteractions
             var comments = Context.Components.FromLabel<TextInput>()?.Value;
             
             var approveApplicationResult = await applicationService.AcceptApplication(selectedDiscordAccount.Id, application, comments);
-            if (!approveApplicationResult.TryGetDataNonNull(out var acceptMessageId))
+            if (!approveApplicationResult.TryGetDataNonNull(out var acceptanceChannel))
             {
                 _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties().WithEmbeds([CallbackFailedToApproveApplication(appId, approveApplicationResult.ErrorMessage)]));
                 return;
@@ -214,10 +214,9 @@ public class ReviewInteractions
             _ = restClient.ModifyMessageAsync(channelId, messageId, options =>
             {
                 var componentList = summaryComponent.Components.ToList();
-                componentList.Add(new ComponentSeparatorProperties());
                 componentList.Add(new ActionRowProperties([
                     new ButtonProperties("button_does_nothing", "Approved!", EmojiProperties.Standard("✔️"), ButtonStyle.Success).WithDisabled(),
-                    new LinkButtonProperties($"https://discord.com/channels/{Context.Guild?.Id}/{acceptMessageId}", "Go to Application")
+                    new LinkButtonProperties($"https://discord.com/channels/{Context.Guild?.Id}/{acceptanceChannel}", "Go to Application")
                 ]));
                 summaryComponent
                     .WithComponents(componentList)
@@ -267,7 +266,7 @@ public class ReviewInteractions
             }
 
             var denyApplicationResult = await applicationService.DenyApplication(selectedDiscordAccount.Id, application, comment);
-            if (!denyApplicationResult.TryGetDataNonNull(out var denyMessageId))
+            if (!denyApplicationResult.TryGetDataNonNull(out var denialChannel))
             {
                 _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties().WithEmbeds([CallbackFailedToRejectApplication(appId, denyApplicationResult.ErrorMessage)]).WithFlags(MessageFlags.Ephemeral));
                 return;
@@ -283,7 +282,7 @@ public class ReviewInteractions
                 componentList.Add(new ComponentSeparatorProperties());
                 componentList.Add(new ActionRowProperties([
                     new ButtonProperties("button_does_nothing", "Rejected!", EmojiProperties.Standard("✖️"), ButtonStyle.Danger).WithDisabled(),
-                    new LinkButtonProperties($"https://discord.com/channels/{Context.Guild?.Id}/{denyMessageId}", "Go to Application")
+                    new LinkButtonProperties($"https://discord.com/channels/{Context.Guild?.Id}/{denialChannel}", "Go to Application")
                 ]));
                 summaryComponent
                     .WithComponents(componentList)

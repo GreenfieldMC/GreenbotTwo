@@ -10,6 +10,7 @@ using GreenbotTwo.Models.Forms;
 using GreenbotTwo.Services;
 using GreenbotTwo.Services.Credentials;
 using GreenbotTwo.Services.Interfaces;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -19,12 +20,25 @@ using NetCord.Hosting.Rest;
 using NetCord.Hosting.Services.ApplicationCommands;
 using NetCord.Hosting.Services.ComponentInteractions;
 using NetCord.Services.ComponentInteractions;
+using Serilog;
+using Serilog.Exceptions;
 using Application = GreenbotTwo.Models.GreenfieldApi.Application;
 
 namespace GreenbotTwo;
 
 public static class StartupExtensions
 {
+    
+    internal static void ConfigureSerilog(this HostApplicationBuilder hostBuilder)
+    {
+        Log.Logger = new LoggerConfiguration()
+            .Enrich.FromLogContext()
+            .Enrich.WithExceptionDetails()
+            .ReadFrom.Configuration(hostBuilder.Configuration)
+            .CreateLogger();
+        
+        hostBuilder.Logging.AddSerilog(logger: Log.Logger);
+    }
     
     /// <summary>
     /// Loads configuration files into the configuration builder.
@@ -103,6 +117,7 @@ public static class StartupExtensions
     internal static IServiceCollection ConfigureDiscordServices(this IServiceCollection services)
     {
         services
+            .AddSerilog(Log.Logger)
             .AddDiscordRest()
             .AddDiscordGateway()
             .AddApplicationCommands()

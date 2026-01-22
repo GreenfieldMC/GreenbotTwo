@@ -79,10 +79,11 @@ public interface IApplicationService
     /// <param name="discordSnowflake">The discord user who submitted the application</param>
     /// <param name="appToForward">The application to build the summary for</param>
     /// <param name="includeButtons">Whether to include action buttons in the summary</param>
-    /// <param name="onlyShowBasicInfo">Whether to only show basic information in the summary</param>>
+    /// <param name="onlyShowBasicInfo">Whether to only show basic information in the summary</param>
     /// <param name="overrideImages">When uploading the images for the first time, they need to be attached like attachments rather than regular links.</param>
+    /// <param name="overrideStatus">If provided, this status will be used instead of fetching the latest status from the application.</param>
     /// <returns></returns>
-    Task<ComponentContainerProperties> BuildApplicationSummary(ulong discordSnowflake, Application appToForward, bool includeButtons = true, bool onlyShowBasicInfo = false, List<ApplicationImage>? overrideImages = null);
+    Task<ComponentContainerProperties> BuildApplicationSummary(ulong discordSnowflake, Application appToForward, bool includeButtons = true, bool onlyShowBasicInfo = false, List<ApplicationImage>? overrideImages = null, ApplicationStatus? overrideStatus = null);
     //
     // /// <summary>
     // /// Forward the given application to review.

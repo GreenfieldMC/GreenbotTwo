@@ -1,11 +1,10 @@
 using System.Text.Json;
-using GreenbotTwo.Models;
-using GreenbotTwo.Models.AuthHub;
 using GreenbotTwo.Services.Interfaces;
+using Microsoft.Extensions.Logging;
 
 namespace GreenbotTwo.Services;
 
-public class AuthenticationHubService(HttpClient httpClient) : IAuthenticationHubService
+public class AuthenticationHubService(ILogger<IAuthenticationHubService> logger, HttpClient httpClient) : IAuthenticationHubService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     
@@ -24,6 +23,7 @@ public class AuthenticationHubService(HttpClient httpClient) : IAuthenticationHu
             return Result<string>.Success(result.Message);
         } catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while validating username {MinecraftUsername}", minecraftUsername);
             return Result<string>.Failure($"An error occurred while validating username: {ex.Message}");
         }
     }
@@ -43,12 +43,8 @@ public class AuthenticationHubService(HttpClient httpClient) : IAuthenticationHu
             return Result<string>.Success(result.Message);
         } catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while authorizing user {MinecraftUsername}", minecraftUsername);
             return Result<string>.Failure($"An error occurred while authorizing user: {ex.Message}");
         }
-    }
-
-    public Task<Result<AuthHubAppConnections>> GetApplications(string applicationCallUrl)
-    {
-        throw new NotImplementedException();
     }
 }

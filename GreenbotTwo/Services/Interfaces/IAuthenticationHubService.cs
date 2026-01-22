@@ -19,11 +19,4 @@ public interface IAuthenticationHubService
     /// <param name="authCode">The auth code given to the user from the Authentication Hub service.</param>
     /// <returns>URL to call to get applications. Does not include the base url</returns>
     Task<Result<string>> Authorize(string minecraftUsername, string authCode);
-
-    /// <summary>
-    /// Gets the applications associated with the given state from Authentication Hub service.
-    /// </summary>
-    /// <param name="applicationCallUrl">URL to call to get applications. Should not include the base url</param>
-    /// <returns>A list of Application connections and their statuses.</returns>
-    Task<Result<AuthHubAppConnections>> GetApplications(string applicationCallUrl);
 }

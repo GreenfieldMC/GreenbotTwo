@@ -7,10 +7,11 @@ using GreenbotTwo.Models;
 using GreenbotTwo.Models.Forms;
 using GreenbotTwo.Models.GreenfieldApi;
 using GreenbotTwo.Services.Interfaces;
+using Microsoft.Extensions.Logging;
 
 namespace GreenbotTwo.Services;
 
-public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
+public class GreenfieldApiService(ILogger<IGreenfieldApiService> logger, HttpClient httpClient) : IGreenfieldApiService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -31,6 +32,7 @@ public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while creating user with Minecraft UUID {MinecraftUuid}", minecraftUuid);
             return Result<User>.Failure($"An error occurred while creating the user: {ex.Message}", HttpStatusCode.InternalServerError);
         }
     }
@@ -50,6 +52,7 @@ public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while fetching build codes.");
             return Result<IEnumerable<BuildCode>>.Failure($"An error occurred while fetching build codes: {ex.Message}", HttpStatusCode.InternalServerError);
         }
     }
@@ -82,6 +85,7 @@ public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while submitting the builder application.");
             return Result<long>.Failure($"An error occurred while submitting the builder application: {ex.Message}", HttpStatusCode.InternalServerError);
         }
     }
@@ -99,18 +103,22 @@ public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
             var content = new StringContent(JsonSerializer.Serialize(imageModel, JsonOptions), Encoding.UTF8, "application/json");
             var response = await httpClient.PutAsync($"application/images/{imageLinkId}", content);
             
+            if (!response.IsSuccessStatusCode) 
+                logger.LogWarning("Failed to update application image with ID {ImageLinkId}. Response: {ReasonPhrase}", imageLinkId, response.ReasonPhrase);
+            
             return !response.IsSuccessStatusCode 
                 ? Result.Failure($"Failed to update application image. {response.ReasonPhrase ?? ""}", response.StatusCode) 
                 : Result.Success();
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while updating the application image.");
             return Result.Failure($"An error occurred while updating the application image: {ex.Message}", HttpStatusCode.InternalServerError);
         }
     }
 
     /// <inheritdoc />
-    public async Task<Result<bool>> AddApplicationStatus(long applicationId, string status, string? statusMessage)
+    public async Task<Result<ApplicationStatus>> AddApplicationStatus(long applicationId, string status, string? statusMessage)
     {
         try 
         {
@@ -122,12 +130,18 @@ public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
             
             var content = new StringContent(JsonSerializer.Serialize(statusModel, JsonOptions), System.Text.Encoding.UTF8, "application/json");
             var response = await httpClient.PostAsync($"application/{applicationId}/status", content);
+
+            if (!response.IsSuccessStatusCode)
+                return Result<ApplicationStatus>.Failure($"Failed to add application status. {response.ReasonPhrase ?? ""}", response.StatusCode);
             
-            return !response.IsSuccessStatusCode ? Result<bool>.Failure($"Failed to add application status. {response.ReasonPhrase ?? ""}", response.StatusCode) : Result<bool>.Success(true);
+            await using var responseStream = await response.Content.ReadAsStreamAsync();
+            var applicationStatus = await JsonSerializer.DeserializeAsync<ApplicationStatus>(responseStream, JsonOptions);
+            return Result<ApplicationStatus>.Success(applicationStatus!);
         }
         catch (Exception ex)
         {
-            return Result<bool>.Failure($"An error occurred while adding the application status: {ex.Message}", HttpStatusCode.InternalServerError);
+            logger.LogError(ex, "An error occurred while adding application status for application ID {ApplicationId}", applicationId);
+            return Result<ApplicationStatus>.Failure($"An error occurred while adding the application status: {ex.Message}", HttpStatusCode.InternalServerError);
         }
     }
 
@@ -148,6 +162,7 @@ public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while fetching the builder application with ID {ApplicationId}", applicationId);
             return Result<Application>.Failure($"An error occurred while fetching the builder application: {ex.Message}", HttpStatusCode.InternalServerError);
         }
     }
@@ -168,6 +183,7 @@ public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while fetching builder applications for user ID {UserId}", userId);
             return Result<IEnumerable<LatestApplicationStatus>>.Failure($"An error occurred while fetching the builder applications: {ex.Message}", HttpStatusCode.InternalServerError);
         }
     }
@@ -188,6 +204,7 @@ public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while fetching users connected to Discord account with ID {DiscordId}", discordId);
             return Result<ConnectionModels.ApiDiscordConnectionWithUsers>.Failure($"An error occurred while fetching users: {ex.Message}", HttpStatusCode.InternalServerError);
         }
     }
@@ -208,6 +225,7 @@ public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while fetching Discord accounts for user ID {UserId}", userId);
             return Result<List<ConnectionModels.ApiDiscordAccount>>.Failure($"An error occurred while fetching Discord accounts: {ex.Message}", HttpStatusCode.InternalServerError);
         }
     }
@@ -217,15 +235,18 @@ public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
         try
         {
             var response = await httpClient.GetAsync($"discord/oauth/connection-link?redirectUrl={Uri.EscapeDataString(redirectUri)}&userId={userId}");
-
+            
+            if (!response.IsSuccessStatusCode)
+                logger.LogWarning("Failed to fetch Discord connect URL for user ID {UserId}. Response: {ReasonPhrase}", userId, response.ReasonPhrase);
+            
             return !response.IsSuccessStatusCode 
                 ? Result<string>.Failure($"Failed to fetch Discord connect URL. {response.ReasonPhrase ?? ""}", response.StatusCode) 
                 : Result<string>.Success(await response.Content.ReadAsStringAsync());
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while fetching Discord connect URL for user ID {UserId}", userId);
             return Result<string>.Failure($"An error occurred while fetching Discord connect URL: {ex.Message}", HttpStatusCode.InternalServerError);
-            
         }
     }
 
@@ -235,12 +256,16 @@ public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
         {
             var response = await httpClient.GetAsync($"discord/oauth/disconnect-link?redirectUrl={HttpUtility.UrlEncode(redirectUri)}&userId={userId}&discordConnectionId={discordConnectionId}");
             
+            if (!response.IsSuccessStatusCode)
+                logger.LogWarning("Failed to fetch Discord disconnect URL for user ID {UserId} and connection ID {DiscordConnectionId}. Response: {ReasonPhrase}", userId, discordConnectionId, response.ReasonPhrase);
+            
             return !response.IsSuccessStatusCode 
                 ? Result<string>.Failure($"Failed to fetch Discord disconnect URL. {response.ReasonPhrase ?? ""}", response.StatusCode) 
                 : Result<string>.Success(await response.Content.ReadAsStringAsync());
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while fetching Discord disconnect URL for user ID {UserId} and connection ID {DiscordConnectionId}", userId, discordConnectionId);
             return Result<string>.Failure($"An error occurred while fetching Discord disconnect URL: {ex.Message}", HttpStatusCode.InternalServerError);
         }
     }
@@ -251,12 +276,16 @@ public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
         {
             var response = await httpClient.GetAsync($"patreon/oauth/connection-link?redirectUrl={Uri.EscapeDataString(redirectUri)}&userId={userId}");
             
-            return !response .IsSuccessStatusCode 
+            if (!response.IsSuccessStatusCode)
+                logger.LogWarning("Failed to fetch Patreon connect URL for user ID {UserId}. Response: {ReasonPhrase}", userId, response.ReasonPhrase);
+            
+            return !response.IsSuccessStatusCode 
                 ? Result<string>.Failure($"Failed to fetch Patreon connect URL. {response.ReasonPhrase ?? ""}", response.StatusCode) 
                 : Result<string>.Success(await response.Content.ReadAsStringAsync());
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while fetching Patreon connect URL for user ID {UserId}", userId);
             return Result<string>.Failure($"An error occurred while fetching Patreon connect URL: {ex.Message}", HttpStatusCode.InternalServerError);
         }
     }
@@ -266,13 +295,17 @@ public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
         try
         {
             var response = await httpClient.GetAsync($"patreon/oauth/disconnect-link?redirectUrl={Uri.EscapeDataString(redirectUri)}&userId={userId}&patreonConnectionId={patreonConnectionId}");
-
+            
+            if (!response.IsSuccessStatusCode)
+                logger.LogWarning("Failed to fetch Patreon disconnect URL for user ID {UserId} and connection ID {PatreonConnectionId}. Response: {ReasonPhrase}", userId, patreonConnectionId, response.ReasonPhrase);
+            
             return !response.IsSuccessStatusCode 
                 ? Result<string>.Failure($"Failed to fetch Patreon disconnect URL. {response.ReasonPhrase ?? ""}", response.StatusCode) 
                 : Result<string>.Success(await response.Content.ReadAsStringAsync());
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while fetching Patreon disconnect URL for user ID {UserId} and connection ID {PatreonConnectionId}", userId, patreonConnectionId);
             return Result<string>.Failure($"An error occurred while fetching Patreon disconnect URL: {ex.Message}", HttpStatusCode.InternalServerError);
         }
     }
@@ -292,6 +325,7 @@ public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while fetching the user by Minecraft UUID {MinecraftUuid}", minecraftUuid);
             return Result<User>.Failure($"An error occurred while fetching the user: {ex.Message}", HttpStatusCode.InternalServerError);
         }
     }
@@ -312,6 +346,7 @@ public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while fetching users connected to Patreon account with ID {PatreonConnectionId}", patreonConnectionId);
             return Result<ConnectionModels.ApiPatreonConnectionWithUsers>.Failure($"An error occurred while fetching patron accounts: {ex.Message}", HttpStatusCode.InternalServerError);
         }
     }
@@ -331,6 +366,7 @@ public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while fetching patron accounts for user ID {UserId}", userId);
             return Result<List<ConnectionModels.ApiPatreonAccount>>.Failure($"An error occurred while fetching patron accounts: {ex.Message}", HttpStatusCode.InternalServerError);
         }
     }
@@ -350,6 +386,7 @@ public class GreenfieldApiService(HttpClient httpClient) : IGreenfieldApiService
         }
         catch (Exception ex)
         {
+            logger.LogError(ex, "An error occurred while fetching the user by ID {UserId}", userId);
             return Result<User>.Failure($"An error occurred while fetching the user: {ex.Message}", HttpStatusCode.InternalServerError);
         }
     }

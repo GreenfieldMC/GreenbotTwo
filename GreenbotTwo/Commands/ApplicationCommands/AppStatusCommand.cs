@@ -82,12 +82,14 @@ public class AppStatusCommand(IApplicationService applicationService, IGreenfiel
             await Context.Interaction.ModifyResponse(embeds: [ErrorApplicationNotFound]);
             return;
         }
+
+        var applicant = (await gfApiService.GetUserById(applicationDetails.UserId)).GetNonNullOrThrow();
         
+        var latestStatus = applicationDetails.BuildAppStatuses.OrderByDescending(s => s.CreatedOn).First();
         embed = GenericEmbeds.Info("Greenfield Application Service",
-            $"**Application ID:** `{applicationDetails.ApplicationId}`\n" +
-            $"**Applicant:** `{applicationDetails.UserId}`\n" +
-            $"**Current Status:** `{applicationDetails.BuildAppStatuses.OrderByDescending(s => s.CreatedOn).First().Status}`\n" +
-            $"**Submitted On:** <t:{new DateTimeOffset(applicationDetails.CreatedOn).ToUnixTimeSeconds()}:F>\n\n" +
+            $"**Application ID:** `{applicationDetails.ApplicationId}` ~~---~~ **Submitted On:** <t:{new DateTimeOffset(applicationDetails.CreatedOn).ToUnixTimeSeconds()}:F>\n" +
+            $"**Current Status:** `{latestStatus.Status}` as of <t:{new DateTimeOffset(latestStatus.CreatedOn).ToUnixTimeSeconds()}:F>\n" +
+            $"**Applicant:** `{applicant.Username}`\n\n" +
             $"Use the `/viewapp {applicationDetails.ApplicationId}` command to view more details about this application."
         );
         await Context.Interaction.ModifyResponse(embeds: [embed]);

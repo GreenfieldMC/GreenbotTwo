@@ -5,6 +5,7 @@ using GreenbotTwo.Embeds;
 using GreenbotTwo.Models.Forms;
 using GreenbotTwo.Models.GreenfieldApi;
 using GreenbotTwo.Services.Interfaces;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NetCord;
 using NetCord.Rest;
@@ -13,7 +14,7 @@ using User = GreenbotTwo.Models.GreenfieldApi.User;
 
 namespace GreenbotTwo.Services;
 
-public class ApplicationService(IOptions<BuilderApplicationSettings> options, RestClient restClient, IGreenfieldApiService gfApiService) : IApplicationService
+public class ApplicationService(ILogger<IApplicationService> logger, IOptions<BuilderApplicationSettings> options, RestClient restClient, IGreenfieldApiService gfApiService) : IApplicationService
 {
     
     private static readonly IDictionary<ulong, BuilderApplicationForm> Applications = new ConcurrentDictionary<ulong, BuilderApplicationForm>();
@@ -40,20 +41,6 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
         return Applications.TryGetValue(discordId, out var application) 
             ? application 
             : null;
-
-        // if (Applications.TryGetValue(discordId, out var application)) return Result<BuilderApplicationForm>.Success(application);
-        //
-        // if (user is null) 
-        //     return Result<BuilderApplicationForm>.Failure("No in-progress application found, and no user data provided to start a new application.", HttpStatusCode.InternalServerError);
-        //
-        // var activeAppResult = await HasApplicationUnderReview(discordId);
-        // if (!activeAppResult.IsSuccessful) return Result<BuilderApplicationForm>.Failure(activeAppResult.ErrorMessage ?? "Failed to retrieve application status.", activeAppResult.StatusCode);
-        // if (activeAppResult.GetNonNullOrThrow()) return Result<BuilderApplicationForm>.Failure("You already have an active application under review. You cannot start a new application until your current one has been reviewed.");
-        //
-        // application = new BuilderApplicationForm(user, discordId);
-        // Applications[discordId] = application;
-        //
-        // return Result<BuilderApplicationForm>.Success(application);
     }
 
     public bool HasApplicationInProgress(ulong discordId)
@@ -85,10 +72,13 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
         
         var submitResult = await gfApiService.SubmitApplication(application);
         if (!submitResult.TryGetDataNonNull(out var submittedAppId))
-            return Result<long>.Failure(submitResult.ErrorMessage ?? "Failed to submit application.", submitResult.StatusCode);
+        {
+            logger.LogError("Failed to submit application for Discord ID {DiscordId}: {ErrorMessage}", discordId, submitResult.ErrorMessage);
+            return Result<long>.Failure(submitResult.ErrorMessage ?? "Failed to submit application.", submitResult.StatusCode);   
+        }
         
         var statusResult = await gfApiService.AddApplicationStatus(submittedAppId, "SubmissionPending", null);
-        if (!statusResult.TryGetDataNonNull(out var wasAdded) || !wasAdded)
+        if (!statusResult.IsSuccessful)
             return Result<long>.Failure(statusResult.ErrorMessage ?? "Failed to set application status.", statusResult.StatusCode);
         
         Applications.Remove(discordId);
@@ -119,6 +109,11 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
                         var fileIndex = Interlocked.Increment(ref currentImageIndex) - 1;
                         return ($"image-{fileIndex}{extension}", download.ImageData, download.ApplicationImage);
                     }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to download image from {ImageLink}", image.Link);
+                        throw;
+                    }
                     finally
                     {
                         semaphore.Release();
@@ -131,6 +126,7 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
         }
         catch (Exception e)
         {
+            logger.LogError(e, "An error occurred while downloading images.");
             return Result<List<(string AttachmentName, Stream ImageData, ApplicationImage ApplicationImage)>>.Failure($"An error occurred while downloading images: {e.Message}", HttpStatusCode.InternalServerError);
         }
         finally
@@ -145,6 +141,8 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
         
         try
         {
+            #region Download all images from application for saving
+            
             var downloadedImagesResult = await DownloadImagesAsync(appToForward.Images);
             if (!downloadedImagesResult.TryGetDataNonNull(out var downloadedImages))
             {
@@ -157,6 +155,10 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
                 );
                 return Result.Failure(downloadedImagesResult.ErrorMessage ?? "Failed to download application images.", downloadedImagesResult.StatusCode);
             }
+            
+            #endregion
+
+            #region Send initial application summary to review channel and attach images directly to message
             
             var appSummary = await BuildApplicationSummary(discordSnowflake, appToForward, overrideImages: downloadedImages.Select(di =>
             {
@@ -172,7 +174,11 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
                     .WithFlags(MessageFlags.IsComponentsV2)
                     .WithAttachments(downloadedImages.Select(data => new AttachmentProperties(data.AttachmentName, data.ImageData)))
             );
+            
+            #endregion
 
+            #region  Extract image URLs from sent message and update saved database image links
+            
             IEnumerable<(string ImageName, string Url)> images = applicationMessage.Components
                 .OfType<ComponentContainer>()
                 .First().Components
@@ -195,6 +201,11 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
                 .ToList();
             var updateImageTasks = attachmentsToUpdate.Select(img => gfApiService.UpdateApplicationImage(img.ImageLinkId, img.Link, img.ImageType)).ToList();
             var updateResults = await Task.WhenAll(updateImageTasks);
+            
+            #endregion
+
+            #region Notify of failed image updates and set application status to UnderReview
+            
             var failedUpdates = updateResults.Where(r => !r.IsSuccessful).ToList();
             if (failedUpdates.Count > 0)
             {
@@ -209,7 +220,7 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
             }
             
             var statusUpdateResult = await gfApiService.AddApplicationStatus(appToForward.ApplicationId, "UnderReview", null);
-            if (!statusUpdateResult.IsSuccessful || !statusUpdateResult.GetNonNullOrThrow())
+            if (!statusUpdateResult.TryGetDataNonNull(out var newStatus))
             {
                 await restClient.SendMessageAsync(forwardChannelId,
                     new MessageProperties()
@@ -220,12 +231,29 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
                 );
             }
 
+            #endregion
+
+            #region Update application summary message to reflect new status and add reactions for approval/rejection
+            
+            var newSummary = await BuildApplicationSummary(discordSnowflake, appToForward, overrideImages: attachmentsToUpdate, overrideStatus: newStatus);
+            
+            await applicationMessage.ModifyAsync(o => o
+                .WithComponents([newSummary.WithAccentColor(ColorHelpers.Info)])
+            );
+            await Task.Delay(500);
             await applicationMessage.AddReactionAsync(new ReactionEmojiProperties("✅"));
             await Task.Delay(500);
             await applicationMessage.AddReactionAsync(new ReactionEmojiProperties("❌"));
+            
+            #endregion
+            
             return Result<bool>.Success(true);
-        } catch (Exception e)
+        } 
+        catch (Exception e)
         {
+            #region Submission forwarding error handling
+            
+            logger.LogError(e, "An error occurred while forwarding application ID {ApplicationId} to review.", appToForward.ApplicationId);
             try
             {
                 await restClient.SendMessageAsync(forwardChannelId,
@@ -236,20 +264,23 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
             }
             catch (Exception e2)
             {
+                logger.LogError(e2, "An error occurred while sending error notification for application ID {ApplicationId}.", appToForward.ApplicationId);
                 return Result<bool>.Failure($"An error occurred while forwarding the application to review, and the error notification also failed: {e2.Message}. Your application ID is: #{appToForward.ApplicationId}", HttpStatusCode.InternalServerError);
             }
             return Result<bool>.Failure($"An error occurred while forwarding the application to review: {e.Message}", HttpStatusCode.InternalServerError);
+            
+            #endregion
         }
     }
 
-    public async Task<ComponentContainerProperties> BuildApplicationSummary(ulong discordSnowflake, Application appToForward, bool includeButtons = true, bool onlyShowBasicInfo = false, List<ApplicationImage>? overrideImages = null)
+    public async Task<ComponentContainerProperties> BuildApplicationSummary(ulong discordSnowflake, Application appToForward, bool includeButtons = true, bool onlyShowBasicInfo = false, List<ApplicationImage>? overrideImages = null, ApplicationStatus? overrideStatus = null)
     {
         var userResult = await gfApiService.GetUserById(appToForward.UserId);
         if (!userResult.TryGetDataNonNull(out var user))
             throw new Exception($"Failed to retrieve user data for application summary: {userResult.ErrorMessage}");
         
-        var applicationComponents = new List<IComponentContainerComponentProperties>();
-        applicationComponents.Add(new TextDisplayProperties($"# Builder Application Summary #{appToForward.ApplicationId}"));
+        var applicationComponents = new List<IComponentContainerComponentProperties> { new TextDisplayProperties($"# Builder Application Summary #{appToForward.ApplicationId}") };
+        
         if (onlyShowBasicInfo) 
             applicationComponents.Add(new TextDisplayProperties($"**__Discord__**: <@{discordSnowflake}>\t\t**__Minecraft IGN__**: `{user.Username}`\t\t**__Age__**: `{appToForward.Age}`{(appToForward.Nationality != null ? $"\t\t**__Nationality__**: `{appToForward.Nationality}`" : "")}"));
         else
@@ -259,7 +290,7 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
                 .Where(img =>
                     img.ImageType.Equals("TempHouse", StringComparison.OrdinalIgnoreCase) ||
                     img.ImageType.Equals("House", StringComparison.OrdinalIgnoreCase))
-                .Select(img => img.Link);
+                .Select(img => img.Link).ToList();
             
             var otherImageLinks = imagesToUse
                 .Where(img =>
@@ -271,9 +302,12 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
             applicationComponents.Add(new ComponentSeparatorProperties());
             applicationComponents.Add(new TextDisplayProperties("### Why do you want to be a part of Greenfield?"));
             applicationComponents.Add(new TextDisplayProperties(appToForward.WhyJoinGreenfield));
-            applicationComponents.Add(new ComponentSeparatorProperties());
-            applicationComponents.Add(new TextDisplayProperties("### North American House Builds"));
-            applicationComponents.Add(new MediaGalleryProperties().WithItems(houseImageLinks.Select(link => new MediaGalleryItemProperties(new ComponentMediaProperties(link)))));
+            if (houseImageLinks.Count != 0)
+            {
+                applicationComponents.Add(new ComponentSeparatorProperties());
+                applicationComponents.Add(new TextDisplayProperties("### North American House Builds"));
+                applicationComponents.Add(new MediaGalleryProperties().WithItems(houseImageLinks.Select(link => new MediaGalleryItemProperties(new ComponentMediaProperties(link)))));
+            }
             if (otherImageLinks.Count != 0)
             {
                 applicationComponents.Add(new ComponentSeparatorProperties());
@@ -293,12 +327,18 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
                 applicationComponents.Add(new ComponentSeparatorProperties());
                 applicationComponents.Add(new TextDisplayProperties("### Additional Comments"));
                 applicationComponents.Add(new TextDisplayProperties(appToForward.AdditionalComments));
-            }   
+            }
+            
+            applicationComponents.Add(new ComponentSeparatorProperties());
+            var currentStatus = overrideStatus ?? appToForward.BuildAppStatuses.OrderByDescending(status => status.CreatedOn).FirstOrDefault();
+            var display = $"*Submitted <t:{new DateTimeOffset(appToForward.CreatedOn).ToUnixTimeSeconds()}:f>*";
+            if (currentStatus is not null)
+                display += $" *is `{currentStatus.Status}` as of <t:{new DateTimeOffset(currentStatus.CreatedOn).ToUnixTimeSeconds()}:f>*";
+            applicationComponents.Add(new TextDisplayProperties(display));
         }
         
         if (!includeButtons) return new ComponentContainerProperties(applicationComponents);
         
-        applicationComponents.Add(new ComponentSeparatorProperties());
         applicationComponents.Add(new ActionRowProperties([
             new ButtonProperties("buildapp_approve_button", "Approve", ButtonStyle.Primary),
             new ButtonProperties("buildapp_reject_button", "Reject", ButtonStyle.Secondary)
@@ -306,42 +346,6 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
 
         return new ComponentContainerProperties(applicationComponents);
     }
-
-    // public async Task<Result<bool>> ForwardApplicationToReview(ulong discordSnowflake, Application appToForward)
-    // {
-    //     var forwardChannelId = options.Value.ReviewChannelId;
-    //     
-    //     try
-    //     {
-    //         var appSummary = await BuildApplicationSummary(discordSnowflake, appToForward);
-    //         var applicationMessage = await restClient.SendMessageAsync(forwardChannelId,
-    //             new MessageProperties()
-    //                 .WithComponents([appSummary.WithAccentColor(ColorHelpers.Info)])
-    //                 .WithFlags(MessageFlags.IsComponentsV2)
-    //         );
-    //
-    //         await applicationMessage.AddReactionAsync(new ReactionEmojiProperties("✅"));
-    //         await Task.Delay(100);
-    //         await applicationMessage.AddReactionAsync(new ReactionEmojiProperties("❌"));
-    //         return Result<bool>.Success(true);
-    //     } catch (Exception e)
-    //     {
-    //         try
-    //         {
-    //             await restClient.SendMessageAsync(forwardChannelId,
-    //                 new MessageProperties().WithEmbeds([
-    //                     GenericEmbeds.UserError("Greenfield Application Service",
-    //                         $"Failed to forward application ID: {appToForward.ApplicationId}")
-    //                 ]));
-    //             Result<bool>.Success(false);
-    //         }
-    //         catch (Exception e2)
-    //         {
-    //             return Result<bool>.Failure($"An error occurred while forwarding the application to review, and the error notification also failed: {e2.Message}. Your application ID is: #{appToForward.ApplicationId}", HttpStatusCode.InternalServerError);
-    //         }
-    //         return Result<bool>.Failure($"An error occurred while forwarding the application to review: {e.Message}", HttpStatusCode.InternalServerError);
-    //     }
-    // }
 
     public async Task<Result<ulong>> DenyApplication(ulong discordSnowflake, Application appToDeny, string reason)
     {
@@ -352,10 +356,9 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
                 throw new Exception($"Failed to retrieve user data for application summary: {userResult.ErrorMessage}");
             
             var storageChannel = options.Value.ApplicationStorageChannelId;
-            var summary = await BuildApplicationSummary(discordSnowflake, appToDeny, includeButtons: false);
 
             var statusSetResult = await gfApiService.AddApplicationStatus(appToDeny.ApplicationId, "Rejected", reason);
-            if (!statusSetResult.IsSuccessful || !statusSetResult.GetNonNullOrThrow())
+            if (!statusSetResult.TryGetDataNonNull(out var newStatus))
                 return Result<ulong>.Failure($"Failed to set application status: {statusSetResult.ErrorMessage}", statusSetResult.StatusCode);
             
             var denialEmbed = new EmbedProperties()
@@ -365,6 +368,7 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
                 .WithColor(ColorHelpers.Failure);
 
             var dmChannelTask = restClient.GetDMChannelAsync(discordSnowflake);
+            var summary = await BuildApplicationSummary(discordSnowflake, appToDeny, includeButtons: false, overrideStatus: newStatus);
             var channel = await restClient.CreateForumGuildThreadAsync(storageChannel,
                 new ForumGuildThreadProperties($"❌ App-{appToDeny.ApplicationId} | {user.Username}", 
                         new ForumGuildThreadMessageProperties()
@@ -403,6 +407,7 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
         }
         catch (Exception e)
         {
+            logger.LogError(e, "An error occurred while denying application ID {ApplicationId}.", appToDeny.ApplicationId);
             return Result<ulong>.Failure($"An error occurred while denying the application: {e.Message}");
         }
     }
@@ -421,18 +426,17 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
             var testRoleId = options.Value.TestBuildRoleId;
             var guildId = options.Value.GuildId;
             
-            var summary = await BuildApplicationSummary(discordSnowflake, appToAccept, includeButtons: false);
-            
             var statusSetResult = await gfApiService.AddApplicationStatus(appToAccept.ApplicationId, "Approved", comments ?? "No additional comments.");
-            if (!statusSetResult.IsSuccessful || !statusSetResult.GetNonNullOrThrow())
+            if (!statusSetResult.TryGetDataNonNull(out var newStatus))
                 return Result<ulong>.Failure($"Failed to set application status: {statusSetResult.ErrorMessage}", statusSetResult.StatusCode);
-            
+
             var acceptanceEmbed = new EmbedProperties()
                 .WithTitle("Congratulations! Your application has been approved!")
                 .WithDescription(
                     $"Welcome to The Greenfield Project! If you aren't whitelisted already, you should be shortly. Please read through the pinned messages for your next steps!")
                 .WithColor(ColorHelpers.Success);
 
+            var summary = await BuildApplicationSummary(discordSnowflake, appToAccept, includeButtons: false, overrideStatus: newStatus);
             var channel = await restClient.CreateForumGuildThreadAsync(storageChannel,
                 new ForumGuildThreadProperties($"✅ App-{appToAccept.ApplicationId} | {user.Username}", 
                         new ForumGuildThreadMessageProperties()
@@ -458,6 +462,7 @@ public class ApplicationService(IOptions<BuilderApplicationSettings> options, Re
         }
         catch (Exception e)
         {
+            logger.LogError(e, "An error occurred while accepting application ID {ApplicationId}.", appToAccept.ApplicationId);
             return Result<ulong>.Failure($"An error occurred while accepting the application: {e.Message}");
         }
     }
