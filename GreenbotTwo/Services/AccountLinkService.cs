@@ -118,7 +118,7 @@ public class AccountLinkService(IGreenfieldApiService apiService) : IAccountLink
         var noLinkedUsersMessage = mode switch
         {
             UserSelectionFor.AccountView => "You do not have any linked Minecraft accounts.",
-            UserSelectionFor.Application => "Thank you for taking interest in applying to our build team! Before continuing with the application, we need you to verify you have a valid Minecraft account and to link your current Discord account to that Minecraft account. Press the `Link a new Minecraft account` button to get started!",
+            UserSelectionFor.Application => "Thank you for taking interest in applying to our build team! Before continuing with the application, we need you to verify you have a valid Minecraft account and we need to link your current Discord account to that Minecraft account. Press the `Link a new Minecraft account` button to get started!",
             _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null)
         };
         
