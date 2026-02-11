@@ -18,15 +18,7 @@ public class BetapackCommand(IOptions<BetapackCommandSettings> settings) : Appli
     {
         await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         
-        var isSameUser = runFor == null || runFor.Id == Context.User.Id;
-
-        if ((runFor ?? Context.User) is not GuildUser userWhoNeedsInstructions)
-        {
-            _ = Context.Interaction.ModifyResponseAsync(options => options
-                .WithEmbeds([GenericEmbeds.UserError("Invalid User", "The specified user is not a member of this server.")])
-                .WithFlags(MessageFlags.Ephemeral));
-            return;
-        }
+        var userWhoNeedsInstructions = runFor ?? Context.User;
 
         var oneTimeDownloadConfig = _settings.OneTimeDownload;
         var oneTimeDownloadMessage = new MessageProperties()
@@ -61,7 +53,7 @@ public class BetapackCommand(IOptions<BetapackCommandSettings> settings) : Appli
                     .WithColor(ColorHelpers.Info)
             ]);
 
-        if (isSameUser)
+        if (userWhoNeedsInstructions.Id == Context.User.Id)
         {
             await Context.Interaction.ModifyResponseAsync(options =>
                 options

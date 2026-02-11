@@ -12,13 +12,17 @@ public interface IAccountLinkService
 
     public bool HasAccountLinkInProgress(ulong discordId);
     
-    public AccountLinkForm GetOrStartAccountLinkForm(ulong discordId);
+    public AccountLinkForm GetOrStartAccountLinkForm(ulong discordId, AccountLinkService.UserSelectionFor source);
 
-    Task<ComponentContainerProperties> GenerateFinishLinkingComponent();
+    Task<ComponentContainerProperties> GenerateFinishLinkingComponent(bool disableButton = false);
     
     Task<ComponentContainerProperties> GenerateAccountViewComponent(User user, string channelUrl);
 
     Task<ComponentContainerProperties> GenerateUserSelectionComponent(AccountLinkService.UserSelectionFor mode,
         List<User> users);
 
+    // cache of recently verified minecraft users per discord id (10 minute ttl)
+    User? GetCachedVerifiedUser(ulong discordId);
+    void SetCachedVerifiedUser(ulong discordId, User user);
+    void ClearCachedVerifiedUser(ulong discordId);
 }

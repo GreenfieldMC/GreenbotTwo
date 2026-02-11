@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Concurrent;
 using GreenbotTwo.Embeds;
 using GreenbotTwo.Interactions.AccountLink;
@@ -13,8 +14,9 @@ namespace GreenbotTwo.Services;
 
 public class AccountLinkService(IGreenfieldApiService apiService) : IAccountLinkService
 {
-    
     private static readonly IDictionary<ulong, AccountLinkForm> ActiveAccountLinkForms = new ConcurrentDictionary<ulong, AccountLinkForm>();
+    private static readonly IDictionary<ulong, (User User, DateTimeOffset ExpiresAt)> CachedVerifiedUsers = new ConcurrentDictionary<ulong, (User, DateTimeOffset)>();
+    private static readonly TimeSpan CachedUserTtl = TimeSpan.FromMinutes(10);
 
     public bool ClearInProgressAccountLink(ulong discordId)
     {
@@ -26,20 +28,20 @@ public class AccountLinkService(IGreenfieldApiService apiService) : IAccountLink
         return ActiveAccountLinkForms.ContainsKey(discordId);
     }
 
-    public AccountLinkForm GetOrStartAccountLinkForm(ulong discordId)
+    public AccountLinkForm GetOrStartAccountLinkForm(ulong discordId, UserSelectionFor source)
     {
         if (ActiveAccountLinkForms.TryGetValue(discordId, out var existingForm))
             return existingForm;
         
-        var newForm = new AccountLinkForm(discordId);
+        var newForm = new AccountLinkForm(discordId, source);
         ActiveAccountLinkForms[discordId] = newForm;
         return newForm;
     }
 
-    public Task<ComponentContainerProperties> GenerateFinishLinkingComponent()
+    public Task<ComponentContainerProperties> GenerateFinishLinkingComponent(bool disableButton = false)
     {
         var container = new ComponentContainerProperties([
-            new ComponentSectionProperties(new ButtonProperties("finish_linking_account", "Finish Linking Account", ButtonStyle.Success), [new TextDisplayProperties("Let's finish linking your account.")])
+            new ComponentSectionProperties(new ButtonProperties("finish_linking_account", "Finish Linking Account", ButtonStyle.Success).WithDisabled(disableButton), [new TextDisplayProperties("Let's finish linking your account.")])
         ]);
         container.WithAccentColor(ColorHelpers.Success);
         return Task.FromResult(container);
@@ -106,35 +108,45 @@ public class AccountLinkService(IGreenfieldApiService apiService) : IAccountLink
             .WithAccentColor(ColorHelpers.Success);
     }
 
-    public Task<ComponentContainerProperties> GenerateUserSelectionComponent(UserSelectionFor mode, List<User> users)
+    public Task<ComponentContainerProperties> GenerateUserSelectionComponent(AccountLinkService.UserSelectionFor mode, List<User> users)
     {
-        var menuId = mode switch
-        {
-            UserSelectionFor.AccountView => AccountLinkInteractions.AccountViewUserSelectionButton,
-            UserSelectionFor.Application => ApplyInteractions.ApplicationUserSelectionButton,
-            _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null)
-        };
+        string userSelectionMenuId;
+        string newAccountButtonId;
+        string noLinkedUsersMessage;
         
-        var noLinkedUsersMessage = mode switch
+        switch (mode)
         {
-            UserSelectionFor.AccountView => "You do not have any linked Minecraft accounts.",
-            UserSelectionFor.Application => "Thank you for taking interest in applying to our build team! Before continuing with the application, we need you to verify you have a valid Minecraft account and we need to link your current Discord account to that Minecraft account. Press the `Link a new Minecraft account` button to get started!",
-            _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null)
-        };
+            case UserSelectionFor.Application:
+                userSelectionMenuId = ApplyInteractions.ApplicationUserSelectionButton;
+                newAccountButtonId = ApplyInteractions.ApplicationLinkNewAccountButton;
+                noLinkedUsersMessage = "Thank you for taking interest in applying to our build team! Before continuing with the application, we need you to verify you have a valid Minecraft account and we need to link your current Discord account to that Minecraft account. Press the button to get started!";
+                break;
+            case UserSelectionFor.AccountView:
+                userSelectionMenuId = AccountLinkInteractions.AccountViewUserSelectionButton;
+                newAccountButtonId = AccountLinkInteractions.AccountLinkNewAccountButton;
+                noLinkedUsersMessage = "You do not have any linked Minecraft accounts.";
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(mode), mode, null);
+        }
+        
         
         var container = new ComponentContainerProperties();
         if (users.Count == 0)
         {
-            container.AddComponents([new ComponentSectionProperties(new ButtonProperties("link_new_account", "Link a new Minecraft account", ButtonStyle.Primary), [new TextDisplayProperties(noLinkedUsersMessage)])]);
+            container.AddComponents(
+                new TextDisplayProperties(noLinkedUsersMessage), 
+                new ActionRowProperties([new ButtonProperties(newAccountButtonId, "Link a new Minecraft account", ButtonStyle.Primary)]));
         }
         else
         {
             container.AddComponents([
-                new StringMenuProperties(menuId, users.Select(u => new StringMenuSelectOptionProperties(u.Username, u.UserId.ToString())).ToList())
+                new TextDisplayProperties("Select an existing account to continue, or link a new Minecraft account."),
+                new StringMenuProperties(userSelectionMenuId, users.Select(u => new StringMenuSelectOptionProperties(u.Username, u.UserId.ToString())).ToList())
                     .WithRequired()
                     .WithMaxValues(1)
                     .WithMinValues(1),
-                new ComponentSectionProperties(new ButtonProperties("link_new_account", "Link a new Minecraft account", ButtonStyle.Primary), [new TextDisplayProperties("Select an existing account to continue, or link a new Minecraft account.")])
+                new ActionRowProperties([new ButtonProperties(newAccountButtonId, "Link a new Minecraft account", ButtonStyle.Primary)])
             ]);
         }
         
@@ -147,5 +159,26 @@ public class AccountLinkService(IGreenfieldApiService apiService) : IAccountLink
         AccountView,
         Application
     }
-    
+
+    public User? GetCachedVerifiedUser(ulong discordId)
+    {
+        if (!CachedVerifiedUsers.TryGetValue(discordId, out var cached))
+            return null;
+        if (cached.ExpiresAt <= DateTimeOffset.UtcNow)
+        {
+            CachedVerifiedUsers.Remove(discordId);
+            return null;
+        }
+        return cached.User;
+    }
+
+    public void SetCachedVerifiedUser(ulong discordId, User user)
+    {
+        CachedVerifiedUsers[discordId] = (user, DateTimeOffset.UtcNow.Add(CachedUserTtl));
+    }
+
+    public void ClearCachedVerifiedUser(ulong discordId)
+    {
+        CachedVerifiedUsers.Remove(discordId);
+    }
 }

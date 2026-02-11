@@ -47,4 +47,20 @@ public class AuthenticationHubService(ILogger<IAuthenticationHubService> logger,
             return Result<string>.Failure($"An error occurred while authorizing user: {ex.Message}");
         }
     }
+
+    public async Task<Result> RemoveAuthSession(Guid minecraftUuid)
+    {
+        try
+        {
+            var response = await httpClient.DeleteAsync($"reset?uuid={minecraftUuid}");
+            
+            return !response.IsSuccessStatusCode 
+                ? Result.Failure("Failed to remove auth session.", response.StatusCode) 
+                : Result.Success();
+        } catch (Exception ex)
+        {
+            logger.LogError(ex, "An error occurred while removing auth session for UUID {MinecraftUuid}", minecraftUuid);
+            return Result.Failure($"An error occurred while removing auth session: {ex.Message}");
+        }
+    }
 }

@@ -17,6 +17,7 @@ public class ApplyInteractions
 {
 
     public const string ApplicationUserSelectionButton = "select_user_for_application";
+    public const string ApplicationLinkNewAccountButton = "link_new_account_for_app";
 
     #region  Normal Application Embeds
 
@@ -41,6 +42,10 @@ public class ApplyInteractions
         "You already have an application in progress. Please complete your existing application before starting a new one.");
     private static readonly EmbedProperties UserErrorApplicationAlreadyUnderReview = GenericEmbeds.UserError("Greenfield Application Service",
         "Your application is already under review. You cannot start a new one until the current application has been processed.");
+    private static readonly EmbedProperties UserErrorNoDiscordAccountsLinked = GenericEmbeds.UserError("Greenfield Application Service",
+        "It appears you do not have any Discord accounts linked to the selected Minecraft account. Please link a Discord account and try again.");
+    private static readonly EmbedProperties UserErrorCurrentDiscordAccountNotLinkedToSelectedUser = GenericEmbeds.UserError("Greenfield Application Service",
+        "The Discord account you are using to apply is not linked to the selected Minecraft account. Please link this Discord account to the Minecraft account and try again.");
     
     #endregion
 
@@ -64,6 +69,8 @@ public class ApplyInteractions
         .WithFooter(new EmbedFooterProperties().WithText("Sorry about this inconvenience!"));
     private static readonly Func<Result<Application>, EmbedProperties> InternalErrorApplicationRetrievalFailure = (applicationResponse) => GenericEmbeds.InternalError("Internal Application Error",
         applicationResponse.ErrorMessage ?? "An unknown error occurred while trying to retrieve your application.");
+    private static readonly EmbedProperties InternalErrorFailedToGetDiscordConnectionUrl = GenericEmbeds.InternalError("Internal Application Error",
+        "An internal error occurred while trying to generate a Discord connection URL. Try to use the `/accounts` command to link your Discord account to your Minecraft account, then try applying again.");
     
     #endregion
     
@@ -100,6 +107,32 @@ public class ApplyInteractions
                 await Context.Interaction.ModifyResponse([UserErrorUnknownUser]);
                 return;
             }
+
+            var sendLinkAccountButton = false;
+            var linkedDiscordAccountsResult = await gfApiService.GetDiscordAccountsForUser(user.UserId);
+            if (!linkedDiscordAccountsResult.TryGetDataNonNull(out var linkedDiscordAccounts) || linkedDiscordAccounts.Count == 0)
+            {
+                sendLinkAccountButton = true;
+                await Context.Interaction.ModifyResponse([UserErrorNoDiscordAccountsLinked]);
+            }
+            else if (linkedDiscordAccounts.All(a => a.DiscordSnowflake != Context.User.Id))
+            {
+                sendLinkAccountButton = true;
+                await Context.Interaction.ModifyResponse([UserErrorCurrentDiscordAccountNotLinkedToSelectedUser]);
+            }
+
+            if (sendLinkAccountButton)
+            {
+                var channelUrl = $"discord://discord.com/channels/{Context.Guild?.Id}/{Context.Channel.Id}";
+                var discordConnectionButtonResult = await applicationService.GenerateDiscordLinkComponent(user.UserId, channelUrl);
+                if (!discordConnectionButtonResult.TryGetDataNonNull(out var discordConnectComponent))
+                {
+                    await Context.Interaction.SendFollowupResponse([InternalErrorFailedToGetDiscordConnectionUrl], [], MessageFlags.Ephemeral);
+                    return;
+                }
+                await Context.Interaction.SendFollowupResponse([], [discordConnectComponent], MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
+                return;
+            }
             
             var application = applicationService.StartApplication(Context.User.Id, user);
             await Context.Interaction.ModifyResponse([ApplicationStartEmbed], [new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())]);
@@ -112,6 +145,57 @@ public class ApplyInteractions
     /// <param name="applicationService"></param>
     public class ApplyMessageButtonInteractions(IOptions<BuilderApplicationSettings> buildAppSettings, IApplicationService applicationService, IGreenfieldApiService apiService, IAccountLinkService accountLinkService) : ComponentInteractionModule<ButtonInteractionContext>
     {
+
+        [ComponentInteraction("start_application")]
+        public async Task StartApplicationButton()
+        {
+            var isInProgress = applicationService.HasApplicationInProgress(Context.User.Id);
+            if (isInProgress)
+            {
+                await Context.Interaction.SendResponse([UserErrorApplicationAlreadyInProgress], MessageFlags.Ephemeral);
+                return;
+            }
+            
+            var isUnderReviewResult = await applicationService.HasApplicationUnderReview(Context.User.Id);
+            if (!isUnderReviewResult.IsSuccessful || isUnderReviewResult.GetNonNullOrThrow())
+            {
+                await Context.Interaction.SendResponse([UserErrorApplicationAlreadyUnderReview]);
+                return;
+            }
+            
+            var userResponse = await apiService.GetUsersConnectedToDiscordAccount(Context.User.Id);
+            if (!userResponse.TryGetData(out var connectionWithUsers) && userResponse.StatusCode != System.Net.HttpStatusCode.NotFound)
+            {
+                await Context.Interaction.SendResponse([UserErrorUnknownUser], MessageFlags.Ephemeral);
+                return;
+            }
+            
+            var users = connectionWithUsers?.Users ?? [];
+            if (users.Count == 0)          {
+                var cached = accountLinkService.GetCachedVerifiedUser(Context.User.Id);
+                if (cached is not null)
+                    users.Add(cached);
+            }
+            var selectionComponent = await accountLinkService.GenerateUserSelectionComponent(AccountLinkService.UserSelectionFor.Application, users);
+            await Context.Interaction.SendResponse(components: [selectionComponent], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
+        }
+        
+        [ComponentInteraction(ApplicationLinkNewAccountButton)]
+        public async Task<InteractionCallbackProperties> LinkNewAccount()
+        {
+            accountLinkService.ClearCachedVerifiedUser(Context.User.Id);
+            accountLinkService.ClearInProgressAccountLink(Context.User.Id);
+            accountLinkService.GetOrStartAccountLinkForm(Context.User.Id, AccountLinkService.UserSelectionFor.Application);
+            var modal = new ModalProperties("authhub_username_modal", "Minecraft Account Link")
+                .WithComponents([
+                    new TextDisplayProperties(
+                        "We require you have direct access to a Java Edition Minecraft account. We will need to verify your account exists. What is your Minecraft username?"),
+                    new LabelProperties("Minecraft Username",
+                        new TextInputProperties("mc_username", TextInputStyle.Short).WithRequired())
+                ]);
+
+            return InteractionCallback.Modal(modal);
+        }
         
         [ComponentInteraction("apply_terms")]
         public InteractionCallbackProperties TermsAndConditionsButton()

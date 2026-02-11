@@ -1,9 +1,12 @@
 using GreenbotTwo.Embeds;
 using GreenbotTwo.Extensions;
+using GreenbotTwo.Services;
 using GreenbotTwo.Services.Interfaces;
+using Microsoft.Extensions.Logging;
 using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ComponentInteractions;
+using Serilog;
 using User = GreenbotTwo.Models.GreenfieldApi.User;
 
 namespace GreenbotTwo.Interactions.AccountLink;
@@ -11,6 +14,7 @@ namespace GreenbotTwo.Interactions.AccountLink;
 public class AccountLinkInteractions
 {
     public const string AccountViewUserSelectionButton = "select_user_for_account_view";
+    public const string AccountLinkNewAccountButton = "link_new_account_for_view";
 
     #region Normal Authorization Embeds
 
@@ -46,11 +50,12 @@ public class AccountLinkInteractions
     
     public class AccountLinkButtonInteractions(IAccountLinkService accountLinkService) : ComponentInteractionModule<ButtonInteractionContext>
     {
-        [ComponentInteraction("link_new_account")]
+        [ComponentInteraction(AccountLinkNewAccountButton)]
         public async Task<InteractionCallbackProperties> LinkNewAccount()
         {
+            accountLinkService.ClearCachedVerifiedUser(Context.User.Id);
             accountLinkService.ClearInProgressAccountLink(Context.User.Id);
-            accountLinkService.GetOrStartAccountLinkForm(Context.User.Id);
+            accountLinkService.GetOrStartAccountLinkForm(Context.User.Id, AccountLinkService.UserSelectionFor.AccountView);
             var modal = new ModalProperties("authhub_username_modal", "Minecraft Account Link")
                 .WithComponents([
                     new TextDisplayProperties(
@@ -73,13 +78,14 @@ public class AccountLinkInteractions
                     .WithFlags(MessageFlags.Ephemeral));
             }
             
-            var accountLinkForm = accountLinkService.GetOrStartAccountLinkForm(Context.User.Id);
+            var accountLinkForm = accountLinkService.GetOrStartAccountLinkForm(Context.User.Id, AccountLinkService.UserSelectionFor.AccountView);
             
             var modal = new ModalProperties("authhub_code_modal", "Minecraft Account Link")
                 .WithComponents([
                     new TextDisplayProperties(
                         "Please join the server `play.greenfieldmc.net` to retrieve your auth code. If you are already whitelisted, join the server and run the command `/authhub`"),
                     new TextDisplayProperties($"Your Minecraft username: `{accountLinkForm.MinecraftUsername}`"),
+                    new TextDisplayProperties($"Your Minecraft UUID: `{accountLinkForm.MinecraftUuid}`"),
                     new LabelProperties("Authentication Code",
                         new TextInputProperties("mc_auth_code", TextInputStyle.Short).WithRequired())
                 ]);
@@ -105,12 +111,12 @@ public class AccountLinkInteractions
                 return;
             }
             
-            var selectionComponent = await accountLinkService.GenerateAccountViewComponent(user, $"discord://discord.com/channel/{Context.Guild!.Id}/{Context.Channel.Id}");
+            var selectionComponent = await accountLinkService.GenerateAccountViewComponent(user, $"discord://discord.com/channels/{Context.Guild!.Id}/{Context.Channel.Id}");
             await Context.Interaction.ModifyResponse(components: [selectionComponent], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
         }
     }
     
-    public class AuthCodeModalInteractions( IAuthenticationHubService authHubService, IAccountLinkService accountLinkService, IGreenfieldApiService apiService, IMojangService mojangApi) : ComponentInteractionModule<ModalInteractionContext>
+    public class AuthCodeModalInteractions(ILogger<AuthCodeModalInteractions> logger, IAuthenticationHubService authHubService, IAccountLinkService accountLinkService, IApplicationService applicationService, IGreenfieldApiService apiService, IMojangService mojangApi) : ComponentInteractionModule<ModalInteractionContext>
     {
 
         [ComponentInteraction("authhub_username_modal")]
@@ -133,19 +139,13 @@ public class AccountLinkInteractions
                 return;
             }
             
-            var accountLinkForm = accountLinkService.GetOrStartAccountLinkForm(Context.User.Id);
+            var accountLinkForm = accountLinkService.GetOrStartAccountLinkForm(Context.User.Id, AccountLinkService.UserSelectionFor.AccountView);
             accountLinkForm.MinecraftUsername = username;
             accountLinkForm.MinecraftUuid = slimProfile.Uuid;
 
             var container = await accountLinkService.GenerateFinishLinkingComponent();
 
-            _ = Context.Interaction.DeleteResponseAsync();
-            _ = Context.Interaction.Message.DeleteAsync();
-            await Context.Interaction.Channel.SendMessageAsync(new MessageProperties()
-                .WithComponents([
-                    container
-                ])
-                .WithFlags(MessageFlags.Ephemeral | MessageFlags.IsComponentsV2));
+            await Context.Interaction.ModifyResponse([], [container], MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
         }
         
         [ComponentInteraction("authhub_code_modal")]
@@ -160,40 +160,81 @@ public class AccountLinkInteractions
                 return;
             }
             
-            var accountLinkForm = accountLinkService.GetOrStartAccountLinkForm(Context.User.Id);
+            var accountLinkForm = accountLinkService.GetOrStartAccountLinkForm(Context.User.Id, AccountLinkService.UserSelectionFor.AccountView);
 
             var authCode = Context.Components.FromLabel<TextInput>("mc_auth_code")?.Value;
 
             var authorizeResult = await authHubService.Authorize(accountLinkForm.MinecraftUsername, authCode ?? "");
-            if (authorizeResult.IsSuccessful)
+            if (!authorizeResult.IsSuccessful)
             {
-                User actualUser;
-                var foundUserResult = await apiService.GetUserByMinecraftUuid(accountLinkForm.MinecraftUuid!.Value);
-                if (!foundUserResult.TryGetDataNonNull(out var existingUser))
-                {
-                    var createUserResult = await apiService.CreateUser(accountLinkForm.MinecraftUuid!.Value, accountLinkForm.MinecraftUsername);
-                    if (!createUserResult.TryGetDataNonNull(out var createdUser))
-                    {
-                        await Context.Interaction.ModifyResponse([InternalErrorFailedToCreateUserAccount]);
-                        return;
-                    }
-                    actualUser = createdUser;
-                }
-                else 
-                    actualUser = existingUser;
-                
-                _ = Context.Interaction.Message!.DeleteAsync();
-                await Context.Interaction.ModifyResponse([AccountLinkedSuccessfullyEmbed]);
-                _ = Context.Channel.SendMessageAsync(new MessageProperties()
-                    .WithComponents([await accountLinkService.GenerateAccountViewComponent(actualUser, $"discord://discord.com/channel/{Context.Guild.Id}/{Context.Channel.Id}")])
-                    .WithFlags(MessageFlags.Ephemeral | MessageFlags.IsComponentsV2));
-                accountLinkService.ClearInProgressAccountLink(Context.User.Id);
+                await Context.Interaction.ModifyResponse([UserErrorFailedToValidateAuthCode]);
                 return;
             }
 
-            await Context.Interaction.ModifyResponse([UserErrorFailedToValidateAuthCode]);
+            var sessionRemoveResult = await authHubService.RemoveAuthSession(accountLinkForm.MinecraftUuid.Value);
+            if (!sessionRemoveResult.IsSuccessful)
+                logger.LogWarning(
+                    "Failed to remove auth session for Minecraft UUID {MinecraftUuid} after successful authorization.",
+                    accountLinkForm.MinecraftUuid.Value);
+
+            User actualUser;
+            var foundUserResult = await apiService.GetUserByMinecraftUuid(accountLinkForm.MinecraftUuid!.Value);
+            if (!foundUserResult.TryGetDataNonNull(out var existingUser))
+            {
+                var createUserResult = await apiService.CreateUser(accountLinkForm.MinecraftUuid!.Value,
+                    accountLinkForm.MinecraftUsername);
+                if (!createUserResult.TryGetDataNonNull(out var createdUser))
+                {
+                    await Context.Interaction.ModifyResponse([InternalErrorFailedToCreateUserAccount]);
+                    return;
+                }
+
+                actualUser = createdUser;
+            }
+            else
+                actualUser = existingUser;
+
+            var finishLinkingComponent = await accountLinkService.GenerateFinishLinkingComponent(true);
+            _ = Context.Interaction.ModifyResponse([AccountLinkedSuccessfullyEmbed]).ContinueWith(FaultLogger);
+            _ = Context.Interaction.Message!.ModifyAsync(options => options
+                .WithComponents([finishLinkingComponent])
+                .WithFlags(MessageFlags.Ephemeral | MessageFlags.IsComponentsV2)).ContinueWith(FaultLogger);
+
+            var currentChannelLink = $"discord://discord.com/channels/{Context.Guild!.Id}/{Context.Channel.Id}";
+            ComponentContainerProperties component;
+
+            if (accountLinkForm.Source == AccountLinkService.UserSelectionFor.Application)
+            {
+                var discordConnectComponentResult =
+                    await applicationService.GenerateDiscordLinkComponent(actualUser.UserId, currentChannelLink);
+                if (!discordConnectComponentResult.TryGetDataNonNull(out var discordConnectComponent))
+                {
+                    logger.LogError("Failed to generate Discord link component for user {UserId} after account linking. Error: {ErrorMessage}", actualUser.UserId, discordConnectComponentResult.ErrorMessage);
+                    component = await accountLinkService.GenerateAccountViewComponent(actualUser, currentChannelLink);
+                } else component = discordConnectComponent;
+            } else component = await accountLinkService.GenerateAccountViewComponent(actualUser, currentChannelLink);
+            
+            _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties()
+                .WithComponents([
+                    component
+                ])
+                .WithFlags(MessageFlags.Ephemeral | MessageFlags.IsComponentsV2)
+            ).ContinueWith(FaultLogger);
+            accountLinkService.SetCachedVerifiedUser(Context.User.Id, actualUser);
+            accountLinkService.ClearInProgressAccountLink(Context.User.Id);
         }
         
+    }
+    
+    private static Action<Task<T>> FaultLogger<T>(Task<T> task)
+    {
+        return t =>
+        {
+            if (t.IsFaulted)
+            {
+                Log.Logger.Error(t.Exception, "An error occurred during interaction handling. {ExceptionMessage}", t.Exception?.Message);
+            }
+        };
     }
     
 }

@@ -57,6 +57,23 @@ public static class InteractionExtensions
     }
     
     /// <summary>
+    /// Sends a follow-up response to the interaction after the initial response.
+    /// </summary>
+    /// <param name="interaction"></param>
+    /// <param name="embeds"></param>
+    /// <param name="components"></param>
+    /// <param name="flags"></param>
+    /// <returns></returns>
+    public static Task<RestMessage> SendFollowupResponse(this Interaction interaction, EmbedProperties[]? embeds = null, IMessageComponentProperties[]? components = null, MessageFlags? flags = null)
+    {
+        var messageProperties = new InteractionMessageProperties();
+        if (embeds is not null) messageProperties.WithEmbeds(embeds);
+        if (components is not null) messageProperties.WithComponents(components);
+        if (flags is not null) messageProperties.WithFlags(flags);
+        return interaction.SendFollowupMessageAsync(messageProperties);
+    }
+    
+    /// <summary>
     /// Modifies the already sent interaction response.
     /// </summary>
     /// <param name="interaction"></param>

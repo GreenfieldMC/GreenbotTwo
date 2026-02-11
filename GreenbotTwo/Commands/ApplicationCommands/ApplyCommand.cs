@@ -34,6 +34,12 @@ public class ApplyCommand(IApplicationService applicationService, IGreenfieldApi
             }
 
             var users = connectionWithUsers?.Users ?? [];
+            if (users.Count == 0)
+            {
+                var cached = accountLinkService.GetCachedVerifiedUser(Context.User.Id);
+                if (cached is not null)
+                    users.Add(cached);
+            }
             var selectionComponent = await accountLinkService.GenerateUserSelectionComponent(AccountLinkService.UserSelectionFor.Application, users);
             await Context.Interaction.ModifyResponse(components: [selectionComponent], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
             return;

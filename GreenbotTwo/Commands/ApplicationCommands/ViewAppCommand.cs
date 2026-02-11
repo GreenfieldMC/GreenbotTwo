@@ -1,5 +1,7 @@
+using GreenbotTwo.Configuration.Models.CommandPermissions.Commands;
 using GreenbotTwo.Embeds;
 using GreenbotTwo.Extensions;
+using GreenbotTwo.Preconditions;
 using GreenbotTwo.Services.Interfaces;
 using NetCord;
 using NetCord.Rest;
@@ -16,7 +18,10 @@ public class ViewAppCommand(IApplicationService applicationService, IGreenfieldA
         $"An internal error occurred while trying to fetch the user who submitted this application. Error: {errorMessage}. Please try again later.");
     
     [SlashCommand("viewapp", "View a submitted application by its ID")]
-    public async Task View(long applicationId)
+    public async Task View(
+        [ApplicationOwnerOrRanked<ViewAppSettings>("RequiredRoleForOtherUserViewing")] 
+        [SlashCommandParameter(Description = "The ID of the application to view.")]
+        long applicationId)
     {
         await Context.Interaction.SendNotifyLoadingResponse(MessageFlags.Ephemeral);
         
@@ -35,7 +40,7 @@ public class ViewAppCommand(IApplicationService applicationService, IGreenfieldA
             return;
         }
 
-        var builtComponent = await applicationService.BuildApplicationSummary(discordAccounts.First().DiscordSnowflake, application, false);
+        var builtComponent = await applicationService.GenerateApplicationSummaryComponent(discordAccounts.First().DiscordSnowflake, application, false);
         await Context.Interaction.ModifyResponse(components: [builtComponent], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
     }
     

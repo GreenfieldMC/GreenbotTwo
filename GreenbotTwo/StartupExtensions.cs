@@ -1,6 +1,8 @@
 using GreenbotTwo.Commands;
 using GreenbotTwo.Commands.ApplicationCommands;
 using GreenbotTwo.Configuration.Models;
+using GreenbotTwo.Configuration.Models.CommandPermissions;
+using GreenbotTwo.Configuration.Models.CommandPermissions.Commands;
 using GreenbotTwo.Configuration.Models.Commands;
 using GreenbotTwo.Configuration.Models.Endpoints;
 using GreenbotTwo.Interactions;
@@ -19,6 +21,7 @@ using NetCord.Hosting.Gateway;
 using NetCord.Hosting.Rest;
 using NetCord.Hosting.Services.ApplicationCommands;
 using NetCord.Hosting.Services.ComponentInteractions;
+using NetCord.Services.ApplicationCommands;
 using NetCord.Services.ComponentInteractions;
 using Serilog;
 using Serilog.Exceptions;
@@ -50,7 +53,7 @@ public static class StartupExtensions
         configBuilder.SetBasePath(env.ContentRootPath)
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
             .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: false, reloadOnChange: true)
-            .AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true)
+            // .AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true)
             .AddEnvironmentVariables();
     }
 
@@ -68,6 +71,9 @@ public static class StartupExtensions
         services.Configure<InstallCommandSettings>(config.GetSection("CommandSettings:InstallCommand"));
         services.AddOptionsWithValidateOnStart<BuilderApplicationSettings>()
             .BindConfiguration("BuilderApplicationSettings");
+        services.Configure<CommandPermissionSettings>(config.GetSection("CommandPermissions"));
+        services.Configure<AppStatusSettings>(config.GetSection("CommandPermissions:AppStatus"));
+        services.Configure<ViewAppSettings>(config.GetSection("CommandPermissions:ViewApp"));
         return services;
     }
 
@@ -120,7 +126,7 @@ public static class StartupExtensions
             .AddSerilog(Log.Logger)
             .AddDiscordRest()
             .AddDiscordGateway()
-            .AddApplicationCommands()
+            .AddApplicationCommands(o => o.ResultHandler = new ApplicationCommandResultHandler<ApplicationCommandContext>(MessageFlags.Ephemeral))
             .AddComponentInteractions<ButtonInteraction, ButtonInteractionContext>()
             .AddComponentInteractions<ModalInteraction, ModalInteractionContext>()
             .AddComponentInteractions<StringMenuInteraction, StringMenuInteractionContext>();

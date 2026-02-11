@@ -74,6 +74,14 @@ public interface IApplicationService
     Task<Result> CompleteAndForwardApplicationToReview(ulong discordSnowflake, Application appToForward);
 
     /// <summary>
+    /// Build a Discord link button as a component container. Used when the user has not linked their current discord account to their selected Minecraft account.
+    /// </summary>
+    /// <param name="userId">The users Greenfield User account Id.</param>
+    /// <param name="channelUrl"></param>
+    /// <returns></returns>
+    Task<Result<ComponentContainerProperties>> GenerateDiscordLinkComponent(long userId, string channelUrl);
+    
+    /// <summary>
     /// Build a summary of the application to be forwarded for review as a component container.
     /// </summary>
     /// <param name="discordSnowflake">The discord user who submitted the application</param>
@@ -83,7 +91,7 @@ public interface IApplicationService
     /// <param name="overrideImages">When uploading the images for the first time, they need to be attached like attachments rather than regular links.</param>
     /// <param name="overrideStatus">If provided, this status will be used instead of fetching the latest status from the application.</param>
     /// <returns></returns>
-    Task<ComponentContainerProperties> BuildApplicationSummary(ulong discordSnowflake, Application appToForward, bool includeButtons = true, bool onlyShowBasicInfo = false, List<ApplicationImage>? overrideImages = null, ApplicationStatus? overrideStatus = null);
+    Task<ComponentContainerProperties> GenerateApplicationSummaryComponent(ulong discordSnowflake, Application appToForward, bool includeButtons = true, bool onlyShowBasicInfo = false, List<ApplicationImage>? overrideImages = null, ApplicationStatus? overrideStatus = null);
     //
     // /// <summary>
     // /// Forward the given application to review.

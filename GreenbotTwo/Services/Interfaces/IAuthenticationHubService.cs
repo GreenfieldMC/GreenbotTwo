@@ -19,4 +19,12 @@ public interface IAuthenticationHubService
     /// <param name="authCode">The auth code given to the user from the Authentication Hub service.</param>
     /// <returns>URL to call to get applications. Does not include the base url</returns>
     Task<Result<string>> Authorize(string minecraftUsername, string authCode);
+
+    /// <summary>
+    /// Removes the auth session for the given Minecraft UUID via Authentication Hub service.
+    /// </summary>
+    /// <param name="minecraftUuid"></param>
+    /// <returns></returns>
+    Task<Result> RemoveAuthSession(Guid minecraftUuid);
+
 }

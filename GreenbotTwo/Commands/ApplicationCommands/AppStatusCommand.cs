@@ -1,6 +1,8 @@
 using System.Text;
+using GreenbotTwo.Configuration.Models.CommandPermissions.Commands;
 using GreenbotTwo.Embeds;
 using GreenbotTwo.Extensions;
+using GreenbotTwo.Preconditions;
 using GreenbotTwo.Services.Interfaces;
 using NetCord;
 using NetCord.Rest;
@@ -8,7 +10,7 @@ using NetCord.Services.ApplicationCommands;
 
 namespace GreenbotTwo.Commands.ApplicationCommands;
 
-public class AppStatusCommand(IApplicationService applicationService, IGreenfieldApiService gfApiService) : ApplicationCommandModule<ApplicationCommandContext>
+public class AppStatusCommand( IApplicationService applicationService, IGreenfieldApiService gfApiService) : ApplicationCommandModule<ApplicationCommandContext>
 {
 
     private static readonly EmbedProperties ErrorNoUsersLinkedToCurrentDiscordAccount =
@@ -20,8 +22,11 @@ public class AppStatusCommand(IApplicationService applicationService, IGreenfiel
     private static readonly EmbedProperties ErrorApplicationNotFound = GenericEmbeds.UserError("Greenfield Application Service", 
         "The application with the provided ID was not found. Please double-check the ID and try again.");
     
-    [SlashCommand("appstatus", "View the status of your build application(s).")]
-    public async Task AppStatus(long? applicationId = null)
+    [SlashCommand("appstatus", "View your past applications or the status of a specific application by ID.")]
+    public async Task AppStatus(
+        [ApplicationOwnerOrRanked<AppStatusSettings>("RequiredRoleForOtherUserViewing")] 
+        [SlashCommandParameter(Description = "The ID of the application to view the status of.")]
+        long? applicationId = null)
     {
         await Context.Interaction.SendNotifyLoadingResponse(MessageFlags.Ephemeral);
         
@@ -62,7 +67,7 @@ public class AppStatusCommand(IApplicationService applicationService, IGreenfiel
                 }
                 
                 embed = GenericEmbeds.Info("Greenfield Application Service",
-                    stringBuilder.AppendLine().AppendLine("Here are your active applications. Use the `/viewapp <applicationId>` command to view more details about a specific application.").ToString().Trim());
+                    stringBuilder.AppendLine().AppendLine("Here are all of your past applications. Use the `/viewapp <applicationId>` command to view more details about a specific application.").ToString().Trim());
             }
 
             if (embed is null)

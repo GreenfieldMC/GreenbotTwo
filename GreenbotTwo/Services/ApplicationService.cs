@@ -160,7 +160,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
 
             #region Send initial application summary to review channel and attach images directly to message
             
-            var appSummary = await BuildApplicationSummary(discordSnowflake, appToForward, overrideImages: downloadedImages.Select(di =>
+            var appSummary = await GenerateApplicationSummaryComponent(discordSnowflake, appToForward, overrideImages: downloadedImages.Select(di =>
             {
                 var imageId = di.ApplicationImage.ImageLinkId;
                 var type = di.ApplicationImage.ImageType;
@@ -235,7 +235,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
 
             #region Update application summary message to reflect new status and add reactions for approval/rejection
             
-            var newSummary = await BuildApplicationSummary(discordSnowflake, appToForward, overrideImages: attachmentsToUpdate, overrideStatus: newStatus);
+            var newSummary = await GenerateApplicationSummaryComponent(discordSnowflake, appToForward, overrideImages: attachmentsToUpdate, overrideStatus: newStatus);
             
             await applicationMessage.ModifyAsync(o => o
                 .WithComponents([newSummary.WithAccentColor(ColorHelpers.Info)])
@@ -273,7 +273,25 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
         }
     }
 
-    public async Task<ComponentContainerProperties> BuildApplicationSummary(ulong discordSnowflake, Application appToForward, bool includeButtons = true, bool onlyShowBasicInfo = false, List<ApplicationImage>? overrideImages = null, ApplicationStatus? overrideStatus = null)
+    public async Task<Result<ComponentContainerProperties>> GenerateDiscordLinkComponent(long userId, string channelUrl)
+    {
+        var discordConnectionUrlResult = await gfApiService.GetDiscordConnectUrl(userId, channelUrl);
+        if (!discordConnectionUrlResult.TryGetDataNonNull(out var discordConnectionUrl))
+            return Result<ComponentContainerProperties>.Failure($"Failed to retrieve Discord connection URL: {discordConnectionUrlResult.ErrorMessage}", discordConnectionUrlResult.StatusCode);
+
+        var container = new ComponentContainerProperties();
+        container.WithComponents([
+            new TextDisplayProperties("To proceed with your builder application, please link your Discord account by clicking the link button below. Once linked, you may begin your application!"),
+            new ActionRowProperties([
+                new LinkButtonProperties(discordConnectionUrl, "Link your current Discord account"),
+                new ButtonProperties("start_application", "Start Application", ButtonStyle.Secondary)
+            ])
+        ]);
+        container.WithAccentColor(ColorHelpers.Info);
+        return Result<ComponentContainerProperties>.Success(container);
+    }
+
+    public async Task<ComponentContainerProperties> GenerateApplicationSummaryComponent(ulong discordSnowflake, Application appToForward, bool includeButtons = true, bool onlyShowBasicInfo = false, List<ApplicationImage>? overrideImages = null, ApplicationStatus? overrideStatus = null)
     {
         var userResult = await gfApiService.GetUserById(appToForward.UserId);
         if (!userResult.TryGetDataNonNull(out var user))
@@ -333,7 +351,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
             var currentStatus = overrideStatus ?? appToForward.BuildAppStatuses.OrderByDescending(status => status.CreatedOn).FirstOrDefault();
             var display = $"*Submitted <t:{new DateTimeOffset(appToForward.CreatedOn).ToUnixTimeSeconds()}:f>*";
             if (currentStatus is not null)
-                display += $" *is `{currentStatus.Status}` as of <t:{new DateTimeOffset(currentStatus.CreatedOn).ToUnixTimeSeconds()}:f>*";
+                display += $" *is now `{currentStatus.Status}` as of <t:{new DateTimeOffset(currentStatus.CreatedOn).ToUnixTimeSeconds()}:f>*";
             applicationComponents.Add(new TextDisplayProperties(display));
         }
         
@@ -368,7 +386,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
                 .WithColor(ColorHelpers.Failure);
 
             var dmChannelTask = restClient.GetDMChannelAsync(discordSnowflake);
-            var summary = await BuildApplicationSummary(discordSnowflake, appToDeny, includeButtons: false, overrideStatus: newStatus);
+            var summary = await GenerateApplicationSummaryComponent(discordSnowflake, appToDeny, includeButtons: false, overrideStatus: newStatus);
             var channel = await restClient.CreateForumGuildThreadAsync(storageChannel,
                 new ForumGuildThreadProperties($"❌ App-{appToDeny.ApplicationId} | {user.Username}", 
                         new ForumGuildThreadMessageProperties()
@@ -436,7 +454,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
                     $"Welcome to The Greenfield Project! If you aren't whitelisted already, you should be shortly. Please read through the pinned messages for your next steps!")
                 .WithColor(ColorHelpers.Success);
 
-            var summary = await BuildApplicationSummary(discordSnowflake, appToAccept, includeButtons: false, overrideStatus: newStatus);
+            var summary = await GenerateApplicationSummaryComponent(discordSnowflake, appToAccept, includeButtons: false, overrideStatus: newStatus);
             var channel = await restClient.CreateForumGuildThreadAsync(storageChannel,
                 new ForumGuildThreadProperties($"✅ App-{appToAccept.ApplicationId} | {user.Username}", 
                         new ForumGuildThreadMessageProperties()

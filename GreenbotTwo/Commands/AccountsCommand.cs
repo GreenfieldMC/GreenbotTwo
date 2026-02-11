@@ -28,9 +28,22 @@ public class AccountsCommand(IGreenfieldApiService apiService, IAccountLinkServi
             return;
         }
 
-        var component = await accountLinkService.GenerateUserSelectionComponent(AccountLinkService.UserSelectionFor.AccountView, connectionWithUsers?.Users ?? []);
+        var users = connectionWithUsers?.Users ?? [];
+        if (users.Count == 0)
+        {
+            var cached = accountLinkService.GetCachedVerifiedUser(Context.User.Id);
+            if (cached is not null)
+            {
+                var channelUrl = $"discord://discord.com/channels/{Context.Guild?.Id}/{Context.Channel.Id}";
+                var accountViewComponent = await accountLinkService.GenerateAccountViewComponent(cached, channelUrl);
+                await Context.Interaction.SendResponse(components: [accountViewComponent], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
+                return;
+            }
+        }
+
+        var selectionComponent = await accountLinkService.GenerateUserSelectionComponent(AccountLinkService.UserSelectionFor.AccountView, users);
         
-        await Context.Interaction.SendResponse(components: [component], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
+        await Context.Interaction.SendResponse(components: [selectionComponent], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
     }
     
 }

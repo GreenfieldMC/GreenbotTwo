@@ -1,6 +1,5 @@
 using GreenbotTwo.Embeds;
 using GreenbotTwo.Extensions;
-using GreenbotTwo.Services;
 using GreenbotTwo.Services.Interfaces;
 using NetCord;
 using NetCord.Rest;
@@ -14,18 +13,7 @@ public class CodesCommand(IGreenfieldApiService greenfieldApiService) : Applicat
     public async Task Codes(
         [SlashCommandParameter(Name = "run_for", Description = "The discord user who needs the install instructions.")] User? runFor = null)
     {
-        await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        
-        var isSameUser = runFor is null || runFor.Id == Context.User.Id;
-        
-        if ((runFor ?? Context.User) is not GuildUser userWhoNeedsCodes)
-        {
-            await Context.Interaction.ModifyResponseAsync(options => options
-                .WithEmbeds([GenericEmbeds.UserError("Invalid User", "The specified user is not a member of this server.")])
-                .WithFlags(MessageFlags.Ephemeral));
-            return;
-        }
-
+        var userWhoNeedsCodes = runFor ?? Context.User;
         await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         
         var buildCodeResult = await greenfieldApiService.GetBuildCodes();   
@@ -62,9 +50,9 @@ public class CodesCommand(IGreenfieldApiService greenfieldApiService) : Applicat
             ])
             .WithFlags(MessageFlags.Ephemeral);
         
-        if (isSameUser)
+        if (userWhoNeedsCodes.Id == Context.User.Id)
         {
-            _ = Context.Interaction.ModifyResponseAsync(_ => message.ToInteractionMessageProperties());
+            await Context.Interaction.ModifyResponseAsync(_ => message.ToInteractionMessageProperties());
             return;
         }
 

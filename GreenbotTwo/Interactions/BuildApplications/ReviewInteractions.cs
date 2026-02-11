@@ -207,7 +207,7 @@ public class ReviewInteractions
                 return;
             }
             
-            var summaryComponent = await applicationService.BuildApplicationSummary(selectedDiscordAccount.Id, application, false, true);
+            var summaryComponent = await applicationService.GenerateApplicationSummaryComponent(selectedDiscordAccount.Id, application, false, true);
             
             var messageId = Context.Interaction.Message.Id;
             var channelId = Context.Channel.Id;
@@ -272,7 +272,7 @@ public class ReviewInteractions
                 return;
             }
 
-            var summaryComponent = await applicationService.BuildApplicationSummary(selectedDiscordAccount.Id, application, false, true);
+            var summaryComponent = await applicationService.GenerateApplicationSummaryComponent(selectedDiscordAccount.Id, application, false, true);
 
             var messageId = Context.Interaction.Message.Id;
             var channelId = Context.Channel.Id;
