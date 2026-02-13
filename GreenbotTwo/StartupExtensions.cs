@@ -9,6 +9,7 @@ using GreenbotTwo.Interactions;
 using GreenbotTwo.Interactions.AccountLink;
 using GreenbotTwo.Interactions.BuildApplications;
 using GreenbotTwo.Models.Forms;
+using GreenbotTwo.Preconditions;
 using GreenbotTwo.Services;
 using GreenbotTwo.Services.Credentials;
 using GreenbotTwo.Services.Interfaces;
@@ -17,10 +18,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NetCord;
+using NetCord.Gateway;
 using NetCord.Hosting.Gateway;
 using NetCord.Hosting.Rest;
 using NetCord.Hosting.Services.ApplicationCommands;
 using NetCord.Hosting.Services.ComponentInteractions;
+using NetCord.Services;
 using NetCord.Services.ApplicationCommands;
 using NetCord.Services.ComponentInteractions;
 using Serilog;
@@ -126,13 +129,14 @@ public static class StartupExtensions
             .AddSerilog(Log.Logger)
             .AddDiscordRest()
             .AddDiscordGateway()
-            .AddApplicationCommands(o => o.ResultHandler = new ApplicationCommandResultHandler<ApplicationCommandContext>(MessageFlags.Ephemeral))
+            .AddApplicationCommands(o => o.ResultHandler = new CommandPreconditionResponseHandler())
             .AddComponentInteractions<ButtonInteraction, ButtonInteractionContext>()
             .AddComponentInteractions<ModalInteraction, ModalInteractionContext>()
             .AddComponentInteractions<StringMenuInteraction, StringMenuInteractionContext>();
         
         return services;
     }
+        
 
     /// <summary>
     /// Configures application commands into the host.

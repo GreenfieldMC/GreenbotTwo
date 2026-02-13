@@ -30,7 +30,7 @@ public class GenericEmbeds
             .WithColor(ColorHelpers.Warning);
     }
     
-    public static EmbedProperties UserError(string title, string description) 
+    public static EmbedProperties UserError(string? title, string description) 
     {
         return new EmbedProperties()
             .WithTitle(title)
