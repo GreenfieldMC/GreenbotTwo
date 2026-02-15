@@ -8,7 +8,14 @@
         "DOTNET_ENVIRONMENT": "Development"
       }
     },
-    "production": {
+    "server-development": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "UAT"
+      }
+    },
+    "server-production": {
       "commandName": "Project",
       "dotnetRunMessages": true,
       "environmentVariables": {
