@@ -156,17 +156,17 @@ public class ApplyInteractions
                 return;
             }
             
-            var isUnderReviewResult = await applicationService.HasApplicationUnderReview(Context.User.Id);
-            if (!isUnderReviewResult.IsSuccessful || isUnderReviewResult.GetNonNullOrThrow())
-            {
-                await Context.Interaction.SendResponse([UserErrorApplicationAlreadyUnderReview]);
-                return;
-            }
-            
             var userResponse = await apiService.GetUsersConnectedToDiscordAccount(Context.User.Id);
             if (!userResponse.TryGetData(out var connectionWithUsers) && userResponse.StatusCode != System.Net.HttpStatusCode.NotFound)
             {
                 await Context.Interaction.SendResponse([UserErrorUnknownUser], MessageFlags.Ephemeral);
+                return;
+            }
+            
+            var isUnderReviewResult = await applicationService.HasApplicationUnderReview(Context.User.Id);
+            if (!isUnderReviewResult.IsSuccessful || isUnderReviewResult.GetNonNullOrThrow())
+            {
+                await Context.Interaction.SendResponse([UserErrorApplicationAlreadyUnderReview], MessageFlags.Ephemeral);
                 return;
             }
             
