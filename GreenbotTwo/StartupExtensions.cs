@@ -76,6 +76,7 @@ public static class StartupExtensions
             .BindConfiguration("BuilderApplicationSettings");
         services.Configure<CommandPermissionSettings>(config.GetSection("CommandPermissions"));
         services.Configure<ApplicationCommandSettings>(config.GetSection("CommandPermissions:ApplicationCommand"));
+        services.Configure<AccountCommandSettings>(config.GetSection("CommandPermissions:AccountCommand"));
         return services;
     }
 

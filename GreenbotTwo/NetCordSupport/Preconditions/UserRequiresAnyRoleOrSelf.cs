@@ -37,7 +37,7 @@ public class UserRequiresAnyRoleOrSelfAttribute<T, TUserType>(string configurati
         //user being checked is a discord user
         if (typeof(TUserType) == typeof(User))
         {
-            var user = value as User ?? throw  new InvalidOperationException(nameof(User) + $" does not exist as type '{typeof(TUserType)}'.");
+            var user = value as User ?? context.User;
             if (user.Id == context.User.Id)
                 return PreconditionResult.Success;
         }
