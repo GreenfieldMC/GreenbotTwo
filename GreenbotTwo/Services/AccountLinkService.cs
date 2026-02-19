@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Concurrent;
 using GreenbotTwo.Embeds;
+using GreenbotTwo.Extensions;
 using GreenbotTwo.Interactions.AccountLink;
 using GreenbotTwo.Interactions.BuildApplications;
 using GreenbotTwo.Models;
 using GreenbotTwo.Models.Forms;
+using GreenbotTwo.Models.GreenfieldApi;
 using GreenbotTwo.Services.Interfaces;
 using NetCord;
 using NetCord.Rest;
@@ -65,9 +67,13 @@ public class AccountLinkService(IGreenfieldApiService apiService) : IAccountLink
             componentList.AddRange(foundProfiles.Select(dConn => 
             {
                 var disconnectUrlResult = apiService.GetDiscordDisconnectUrl(user.UserId, dConn.DiscordConnectionId, channelUrl).GetAwaiter().GetResult();
-                return !disconnectUrlResult.TryGetDataNonNull(out var disconnectUrl) 
-                    ? new ActionRowProperties([new ButtonProperties("__danger__", $"Unlink {dConn.DiscordUsername}", ButtonStyle.Secondary).WithDisabled()]) 
-                    : new ActionRowProperties([new LinkButtonProperties(disconnectUrl, $"Unlink {dConn.DiscordUsername}")]);
+                ICustomizableButtonProperties button = !disconnectUrlResult.TryGetDataNonNull(out var disconnectUrl) 
+                    ? new ButtonProperties("__danger__", $"Unlink {dConn.DiscordUsername}", ButtonStyle.Secondary).WithDisabled() 
+                    : new LinkButtonProperties(disconnectUrl, $"Unlink {dConn.DiscordUsername}");
+
+                return new ComponentSectionProperties(button).WithComponents([
+                    new TextDisplayProperties(dConn.DiscordSnowflake.Mention())
+                ]);
             }));
         
         componentList.Add(new ComponentSeparatorProperties());
@@ -84,9 +90,13 @@ public class AccountLinkService(IGreenfieldApiService apiService) : IAccountLink
             componentList.AddRange(foundPatrons.Select(pConn =>
             {
                 var disconnectUrlResult = apiService.GetPatreonDisconnectUrl(user.UserId, pConn.PatreonConnectionId, channelUrl).GetAwaiter().GetResult();
-                return !disconnectUrlResult.TryGetDataNonNull(out var disconnectUrl) 
-                    ? new ActionRowProperties([new ButtonProperties("__danger__", $"Unlink {pConn.FullName}", ButtonStyle.Secondary).WithDisabled()]) 
-                    : new ActionRowProperties([new LinkButtonProperties(disconnectUrl, $"Unlink {pConn.FullName}")]);
+                ICustomizableButtonProperties button = !disconnectUrlResult.TryGetDataNonNull(out var disconnectUrl) 
+                    ? new ButtonProperties("__danger__", $"Unlink {pConn.FullName}", ButtonStyle.Secondary).WithDisabled() 
+                    : new LinkButtonProperties(disconnectUrl, $"Unlink {pConn.FullName}");
+                
+                return new ComponentSectionProperties(button).WithComponents([
+                    new TextDisplayProperties($"{pConn.FullName} (Pledge: {pConn.Pledge / 100m:C})")
+                ]);
             }));
         
         componentList.Add(new ComponentSeparatorProperties());

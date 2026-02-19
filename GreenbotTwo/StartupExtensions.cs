@@ -55,9 +55,13 @@ public static class StartupExtensions
     {
         configBuilder.SetBasePath(env.ContentRootPath)
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-            .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: false, reloadOnChange: true)
-            // .AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true)
-            .AddEnvironmentVariables();
+            .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: false, reloadOnChange: true);
+        
+        //if there is a setting in the startup to --use-local-appsettings, also load the appsettings.local.json file
+        if (Environment.GetCommandLineArgs().Contains("--use-local-appsettings")) 
+            configBuilder.AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true);
+
+        configBuilder.AddEnvironmentVariables();
     }
 
     /// <summary>
