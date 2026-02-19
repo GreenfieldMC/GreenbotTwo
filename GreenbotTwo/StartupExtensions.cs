@@ -9,7 +9,7 @@ using GreenbotTwo.Interactions;
 using GreenbotTwo.Interactions.AccountLink;
 using GreenbotTwo.Interactions.BuildApplications;
 using GreenbotTwo.Models.Forms;
-using GreenbotTwo.Preconditions;
+using GreenbotTwo.NetCordSupport.Preconditions;
 using GreenbotTwo.Services;
 using GreenbotTwo.Services.Credentials;
 using GreenbotTwo.Services.Interfaces;
@@ -75,8 +75,7 @@ public static class StartupExtensions
         services.AddOptionsWithValidateOnStart<BuilderApplicationSettings>()
             .BindConfiguration("BuilderApplicationSettings");
         services.Configure<CommandPermissionSettings>(config.GetSection("CommandPermissions"));
-        services.Configure<AppStatusSettings>(config.GetSection("CommandPermissions:AppStatus"));
-        services.Configure<ViewAppSettings>(config.GetSection("CommandPermissions:ViewApp"));
+        services.Configure<ApplicationCommandSettings>(config.GetSection("CommandPermissions:ApplicationCommand"));
         return services;
     }
 
@@ -150,8 +149,7 @@ public static class StartupExtensions
         app.AddApplicationCommandModule<BetapackCommand>();
         app.AddApplicationCommandModule<ApplyCommand>();
         app.AddApplicationCommandModule<AccountsCommand>();
-        app.AddApplicationCommandModule<AppStatusCommand>();
-        app.AddApplicationCommandModule<ViewAppCommand>();
+        app.AddApplicationCommandModule<ApplicationsCommand>();
         return app;
     }
     
