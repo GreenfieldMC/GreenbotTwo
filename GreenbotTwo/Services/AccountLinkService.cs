@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Globalization;
 using GreenbotTwo.Embeds;
 using GreenbotTwo.Extensions;
 using GreenbotTwo.Interactions.AccountLink;
@@ -95,7 +96,7 @@ public class AccountLinkService(IGreenfieldApiService apiService) : IAccountLink
                     : new LinkButtonProperties(disconnectUrl, $"Unlink {pConn.FullName}");
                 
                 return new ComponentSectionProperties(button).WithComponents([
-                    new TextDisplayProperties($"{pConn.FullName} (Pledge: {pConn.Pledge / 100m:C})")
+                    new TextDisplayProperties($"{pConn.FullName} (Pledge: {((pConn.Pledge ?? 0) / 100m).ToString("C", new CultureInfo("en-US"))})")
                 ]);
             }));
         
