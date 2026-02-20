@@ -1,28 +1,33 @@
 using GreenbotTwo.Embeds;
 using GreenbotTwo.Extensions;
 using GreenbotTwo.Services.Interfaces;
+using Microsoft.Extensions.Logging;
 using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
 namespace GreenbotTwo.Commands;
 
-public class CodesCommand(IGreenfieldApiService greenfieldApiService) : ApplicationCommandModule<ApplicationCommandContext>
+public class CodesCommand(IGreenfieldApiService greenfieldApiService, ILogger<IApplicationCommandContext> commandLogger) : ApplicationCommandModule<ApplicationCommandContext>
 {
+    
+    private static readonly EmbedProperties ErrorCouldNotFetchBuildCodes = GenericEmbeds.InternalError("Internal Application Error", "An error occurred while fetching build codes. Please try again later.");
+    private static readonly EmbedProperties ErrorNoBuildCodesDefined = GenericEmbeds.UserError("Current Server Build Codes", "There are currently no build codes available.");
+    
     [SlashCommand("codes", "Get all build codes from Greenfield")]
     public async Task Codes(
         [SlashCommandParameter(Name = "run_for", Description = "The discord user who needs the install instructions.")] User? runFor = null)
     {
         var userWhoNeedsCodes = runFor ?? Context.User;
-        await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        commandLogger.LogCommandExecution(Context, $"run_for: {userWhoNeedsCodes.Username}");
+        await Context.Interaction.SendNotifyLoadingResponse(MessageFlags.Ephemeral);
         
         var buildCodeResult = await greenfieldApiService.GetBuildCodes();   
         
         if (!buildCodeResult.TryGetDataNonNull(out var buildCodesEnum))
         {
-            await Context.Interaction.ModifyResponseAsync(options => options
-                .WithEmbeds([GenericEmbeds.InternalError("Internal Application Error",$"An error occurred while fetching build codes: {buildCodeResult.ErrorMessage}")])
-                .WithFlags(MessageFlags.Ephemeral));
+            commandLogger.LogCommandDebug(Context, $"Failed to fetch build codes with error: {buildCodeResult.ErrorMessage}, Status Code: {buildCodeResult.StatusCode}");
+            await Context.Interaction.ModifyResponse([ErrorCouldNotFetchBuildCodes]);
             return;
         }
 
@@ -30,9 +35,8 @@ public class CodesCommand(IGreenfieldApiService greenfieldApiService) : Applicat
 
         if (buildCodes.Count == 0)
         {
-            _ = Context.Interaction.ModifyResponseAsync(options => options
-                .WithEmbeds([GenericEmbeds.UserError("No Build Codes Found", "There are currently no build codes available.")])
-                .WithFlags(MessageFlags.Ephemeral));
+            commandLogger.LogCommandDebug(Context, "No build codes are defined for the server.");
+            await Context.Interaction.ModifyResponse([ErrorNoBuildCodesDefined]);
             return;
         }
 
@@ -52,11 +56,12 @@ public class CodesCommand(IGreenfieldApiService greenfieldApiService) : Applicat
         
         if (userWhoNeedsCodes.Id == Context.User.Id)
         {
+            commandLogger.LogCommandDebug(Context, "User requested their own build codes.");
             await Context.Interaction.ModifyResponseAsync(_ => message.ToInteractionMessageProperties());
             return;
         }
 
         await Context.Interaction.DeleteResponseAsync();
-        _ = Context.Channel.SendMessageAsync(message);
+        await Context.Channel.SendMessageAsync(message);
     }
 }
