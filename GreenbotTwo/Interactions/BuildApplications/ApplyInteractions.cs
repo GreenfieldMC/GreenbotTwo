@@ -207,14 +207,10 @@ public class ApplyInteractions
                 .WithComponents([
                     new TextDisplayProperties("Before you continue with your application, the terms and conditions for build members (under the *\"Build Member Conditions\"* heading) must be understood and agreed to. You can find and read these conditions at the link below!"),
                     new TextDisplayProperties("~~-->~~ [Build Member Conditions](https://www.greenfieldmc.net/conditions/) ~~<--~~"),
-                    new LabelProperties("Do you agree with the Terms and Conditions?", new StringMenuProperties("apply_modal_terms_agreement", 
-                            [
-                                    new StringMenuSelectOptionProperties("I agree with the Terms and Conditions.", "agree"), 
-                                    new StringMenuSelectOptionProperties("I do NOT agree with the Terms and Conditions.", "disagree")
-                                ])
-                                .WithMinValues(1)
-                                .WithMaxValues(1))
-                        .WithDescription("You must agree to the terms and conditions to proceed with your application.")
+                    new LabelProperties("Do you agree with the Terms and Conditions?", new CheckboxGroupProperties("apply_modal_terms_agreement")
+                            .WithOptions([new CheckboxGroupOptionProperties("I agree to the Terms and Conditions.", "agree")])
+                            .WithRequired()
+                        ).WithDescription("You must agree to the terms and conditions to proceed with your application.")
                 ]);
             
             return InteractionCallback.Modal(modal);
@@ -341,8 +337,8 @@ public class ApplyInteractions
 
             var application = applicationService.GetApplication(Context.User.Id) ?? throw new InvalidOperationException("Application in progress but could not be retrieved.");
 
-            var selection = (Context.Components.FromLabel<StringMenu>()?.SelectedValues ?? [])[0];
-            if (selection.Equals("disagree", StringComparison.InvariantCultureIgnoreCase)) 
+            var selection = (Context.Components.FromLabel<CheckboxGroup>()?.CheckedValues ?? [])[0];
+            if (!selection.Equals("agree", StringComparison.InvariantCultureIgnoreCase)) 
             {
                 applicationService.ClearInProgressApplication(Context.User.Id);
                 await Context.Interaction.ModifyResponse([UserErrorTermsOfServiceDisagreement], []);
