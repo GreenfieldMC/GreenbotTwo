@@ -501,7 +501,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
 
             await Task.Delay(100);
 
-            await restClient.SendMessageAsync(testBuilderChannel, new MessageProperties().WithEmbeds([acceptanceEmbed(discordSnowflake)]));
+            await restClient.SendMessageAsync(testBuilderChannel, new MessageProperties().WithEmbeds([acceptanceEmbed(discordSnowflake)]).WithAllowedMentions(new AllowedMentionsProperties().AddAllowedUsers(discordSnowflake)));
             await restClient.AddGuildUserRoleAsync(guildId, discordSnowflake, testRoleId, new RestRequestProperties().WithAuditLogReason("Builder application accepted"));
             
             return Result<ulong>.Success(channel.Id);
