@@ -471,10 +471,10 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
                 newStatus = writtenStatus;
             } else newStatus = appToAccept.LatestStatus ?? throw new Exception("Application has no status, and writeApplicationStatus is set to false, so there is no status to display in the summary.");
 
-            var acceptanceEmbed = new EmbedProperties()
+            var acceptanceEmbed = (ulong id) => new EmbedProperties()
                 .WithTitle("Congratulations! Your application has been approved!")
                 .WithDescription(
-                    $"Welcome to The Greenfield Project! If you aren't whitelisted already, you should be shortly. Please read through the pinned messages for your next steps!")
+                    $"{id.Mention()}, welcome to The Greenfield Project! If you aren't whitelisted already, you should be shortly. Please read through the pinned messages for your next steps!")
                 .WithColor(ColorHelpers.Success);
 
             var summary = await GenerateApplicationSummaryComponent(discordSnowflake, appToAccept, overrideStatus: newStatus);
@@ -494,14 +494,14 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
             
             _ = restClient.SendMessageAsync(channel.Id,
                 new MessageProperties()
-                    .WithEmbeds([GenericEmbeds.Info("Application Accepted", $"The applicant has been approved. Additional comments (if any): \n\n{comments ?? "None provided."}")])
+                    .WithEmbeds([GenericEmbeds.Info("Application Accepted", $"The applicant {discordSnowflake.Mention()} has been approved. Additional comments (if any): \n\n{comments ?? "None provided."}")])
                     .WithMessageReference(MessageReferenceProperties.Reply(channel.Id, false))
                     .WithAllowedMentions(new AllowedMentionsProperties().AddAllowedUsers(discordSnowflake))
             );
 
             await Task.Delay(100);
 
-            await restClient.SendMessageAsync(testBuilderChannel, new MessageProperties().WithEmbeds([acceptanceEmbed]));
+            await restClient.SendMessageAsync(testBuilderChannel, new MessageProperties().WithEmbeds([acceptanceEmbed(discordSnowflake)]));
             await restClient.AddGuildUserRoleAsync(guildId, discordSnowflake, testRoleId, new RestRequestProperties().WithAuditLogReason("Builder application accepted"));
             
             return Result<ulong>.Success(channel.Id);
