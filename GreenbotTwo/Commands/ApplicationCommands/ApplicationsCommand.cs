@@ -164,7 +164,7 @@ public class ApplicationsCommand(IGreenfieldApiService gfApiService, IMojangServ
             return;
         }
         
-        var builtComponent = await applicationService.GenerateApplicationSummaryComponent(discordAccounts.First().DiscordSnowflake, application, includeButtons: false);
+        var builtComponent = await applicationService.GenerateApplicationSummaryComponent(discordAccounts.First().DiscordSnowflake, application);
         var latestStatus = application.BuildAppStatuses.OrderByDescending(s => s.CreatedOn).FirstOrDefault();
         EmbedProperties? statusEmbed = null;
         if (latestStatus?.StatusMessage != null && !latestStatus.Status.Equals("Approved", StringComparison.OrdinalIgnoreCase))

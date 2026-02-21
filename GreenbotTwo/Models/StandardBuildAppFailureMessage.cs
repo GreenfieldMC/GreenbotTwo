@@ -25,6 +25,6 @@ public record StandardBuildAppFailureMessage(string Id, string Label, string Mes
     
     public static StandardBuildAppFailureMessage FromId(string id) => AllFailureMessages.First(x => x.Id == id);
 
-    public StringMenuSelectOptionProperties ToSelectOption() => new(Label, Id);
+    public CheckboxGroupOptionProperties ToCheckboxOption() => new(Label, Id);
 
 }

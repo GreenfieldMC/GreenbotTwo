@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Net;
 using GreenbotTwo.Configuration.Models;
 using GreenbotTwo.Embeds;
+using GreenbotTwo.Extensions;
+using GreenbotTwo.Interactions.BuildApplications;
 using GreenbotTwo.Models.Forms;
 using GreenbotTwo.Models.GreenfieldApi;
 using GreenbotTwo.Services.Interfaces;
@@ -138,6 +140,13 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
     public async Task<Result> CompleteAndForwardApplicationToReview(ulong discordSnowflake, Application appToForward)
     {
         var forwardChannelId = options.Value.ReviewChannelId;
+
+        var reviewButtons = new List<IActionRowComponentProperties>
+        { 
+            new ButtonProperties($"buildapp_approve_button:{appToForward.ApplicationId}:{discordSnowflake}", "Approve", ButtonStyle.Success),
+            new ButtonProperties($"buildapp_reject_button:{appToForward.ApplicationId}:{discordSnowflake}", "Reject", ButtonStyle.Danger),
+            new ButtonProperties($"buildapp_refresh_button:{appToForward.ApplicationId}:{discordSnowflake}:{(int)ReviewInteractions.ReviewButtonInteractions.RefreshButtonMode.ResolveSummary}", "Refresh", ButtonStyle.Secondary)
+        };
         
         try
         {
@@ -170,7 +179,10 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
             
             var applicationMessage = await restClient.SendMessageAsync(forwardChannelId,
                 new MessageProperties()
-                    .WithComponents([appSummary.WithAccentColor(ColorHelpers.Info)])
+                    .WithComponents([appSummary.WithAccentColor(ColorHelpers.Info).WithComponents([
+                        ..appSummary.Components.ToList(),
+                        new ActionRowProperties(reviewButtons)
+                    ])])
                     .WithFlags(MessageFlags.IsComponentsV2)
                     .WithAttachments(downloadedImages.Select(data => new AttachmentProperties(data.AttachmentName, data.ImageData)))
             );
@@ -238,7 +250,10 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
             var newSummary = await GenerateApplicationSummaryComponent(discordSnowflake, appToForward, overrideImages: attachmentsToUpdate, overrideStatus: newStatus);
             
             await applicationMessage.ModifyAsync(o => o
-                .WithComponents([newSummary.WithAccentColor(ColorHelpers.Info)])
+                .WithComponents([newSummary.WithAccentColor(ColorHelpers.Info).WithComponents([
+                    ..newSummary.Components.ToList(),
+                    new  ActionRowProperties(reviewButtons)
+                ])])
             );
             await Task.Delay(500);
             await applicationMessage.AddReactionAsync(new ReactionEmojiProperties("✅"));
@@ -291,7 +306,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
         return Result<ComponentContainerProperties>.Success(container);
     }
 
-    public async Task<ComponentContainerProperties> GenerateApplicationSummaryComponent(ulong discordSnowflake, Application appToForward, bool includeButtons = true, bool onlyShowBasicInfo = false, List<ApplicationImage>? overrideImages = null, ApplicationStatus? overrideStatus = null)
+    public async Task<ComponentContainerProperties> GenerateApplicationSummaryComponent(ulong discordSnowflake, Application appToForward, bool onlyShowBasicInfo = false, List<ApplicationImage>? overrideImages = null, ApplicationStatus? overrideStatus = null)
     {
         var userResult = await gfApiService.GetUserById(appToForward.UserId);
         if (!userResult.TryGetDataNonNull(out var user))
@@ -300,7 +315,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
         var applicationComponents = new List<IComponentContainerComponentProperties> { new TextDisplayProperties($"# Builder Application Summary #{appToForward.ApplicationId}") };
         
         if (onlyShowBasicInfo) 
-            applicationComponents.Add(new TextDisplayProperties($"**__Discord__**: <@{discordSnowflake}>\t\t**__Minecraft IGN__**: `{user.Username}`\t\t**__Age__**: `{appToForward.Age}`{(appToForward.Nationality != null ? $"\t\t**__Nationality__**: `{appToForward.Nationality}`" : "")}"));
+            applicationComponents.Add(new TextDisplayProperties($"**__Discord__**: {discordSnowflake.Mention()}\t\t**__Minecraft IGN__**: `{user.Username}`\t\t**__Age__**: `{appToForward.Age}`{(appToForward.Nationality != null ? $"\t\t**__Nationality__**: `{appToForward.Nationality}`" : "")}"));
         else
         {
             var imagesToUse = overrideImages ?? appToForward.Images;
@@ -316,7 +331,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
                     img.ImageType.Equals("Other", StringComparison.OrdinalIgnoreCase))
                 .Select(img => img.Link).ToList();
             
-            applicationComponents.Add(new TextDisplayProperties($"**__Discord__**: <@{discordSnowflake}>\t\t**__Minecraft IGN__**: `{user.Username}`\t\t**__Age__**: `{appToForward.Age}`{(appToForward.Nationality != null ? $"\t\t**__Nationality__**: `{appToForward.Nationality}`" : "")}\n\n**__Minecraft UUID__**: `{user.MinecraftUuid}`"));
+            applicationComponents.Add(new TextDisplayProperties($"**__Discord__**: {discordSnowflake.Mention()}\t\t**__Minecraft IGN__**: `{user.Username}`\t\t**__Age__**: `{appToForward.Age}`{(appToForward.Nationality != null ? $"\t\t**__Nationality__**: `{appToForward.Nationality}`" : "")}\n\n**__Minecraft UUID__**: `{user.MinecraftUuid}`"));
             applicationComponents.Add(new ComponentSeparatorProperties());
             applicationComponents.Add(new TextDisplayProperties("### Why do you want to be a part of Greenfield?"));
             applicationComponents.Add(new TextDisplayProperties(appToForward.WhyJoinGreenfield));
@@ -348,24 +363,17 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
             }
             
             applicationComponents.Add(new ComponentSeparatorProperties());
-            var currentStatus = overrideStatus ?? appToForward.BuildAppStatuses.OrderByDescending(status => status.CreatedOn).FirstOrDefault();
+            var currentStatus = overrideStatus ?? appToForward.LatestStatus;
             var display = $"*Submitted <t:{new DateTimeOffset(appToForward.CreatedOn).ToUnixTimeSeconds()}:f>*";
             if (currentStatus is not null)
-                display += $" *is now `{currentStatus.Status}` as of <t:{new DateTimeOffset(currentStatus.CreatedOn).ToUnixTimeSeconds()}:f>*";
+                display += $" *is now `{currentStatus.Status}` as of <t:{new DateTimeOffset(DateTime.Now).ToUnixTimeSeconds()}:f>*";
             applicationComponents.Add(new TextDisplayProperties(display));
         }
         
-        if (!includeButtons) return new ComponentContainerProperties(applicationComponents);
-        
-        applicationComponents.Add(new ActionRowProperties([
-            new ButtonProperties("buildapp_approve_button", "Approve", ButtonStyle.Primary),
-            new ButtonProperties("buildapp_reject_button", "Reject", ButtonStyle.Secondary)
-        ]));
-
         return new ComponentContainerProperties(applicationComponents);
     }
 
-    public async Task<Result<ulong>> DenyApplication(ulong discordSnowflake, Application appToDeny, string reason)
+    public async Task<Result<ulong>> DenyApplication(ulong discordSnowflake, Application appToDeny, string reason, bool writeApplicationStatus = true)
     {
         try
         {
@@ -375,9 +383,14 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
             
             var storageChannel = options.Value.ApplicationStorageChannelId;
 
-            var statusSetResult = await gfApiService.AddApplicationStatus(appToDeny.ApplicationId, "Rejected", reason);
-            if (!statusSetResult.TryGetDataNonNull(out var newStatus))
-                return Result<ulong>.Failure($"Failed to set application status: {statusSetResult.ErrorMessage}", statusSetResult.StatusCode);
+            ApplicationStatus newStatus;
+            if (writeApplicationStatus)
+            {
+                var statusSetResult = await gfApiService.AddApplicationStatus(appToDeny.ApplicationId, "Rejected", reason);
+                if (!statusSetResult.TryGetDataNonNull(out var writtenStatus))
+                    return Result<ulong>.Failure($"Failed to set application status: {statusSetResult.ErrorMessage}", statusSetResult.StatusCode);
+                newStatus = writtenStatus;
+            } else newStatus = appToDeny.LatestStatus ?? throw new Exception("Application has no status, and writeApplicationStatus is set to false, so there is no status to display in the summary.");
             
             var denialEmbed = new EmbedProperties()
                 .WithTitle("About your application...")
@@ -386,12 +399,18 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
                 .WithColor(ColorHelpers.Failure);
 
             var dmChannelTask = restClient.GetDMChannelAsync(discordSnowflake);
-            var summary = await GenerateApplicationSummaryComponent(discordSnowflake, appToDeny, includeButtons: false, overrideStatus: newStatus);
+            var summary = await GenerateApplicationSummaryComponent(discordSnowflake, appToDeny, overrideStatus: newStatus);
+            var baseComponents = summary.Components.ToList();
             var channel = await restClient.CreateForumGuildThreadAsync(storageChannel,
                 new ForumGuildThreadProperties($"❌ App-{appToDeny.ApplicationId} | {user.Username}", 
                         new ForumGuildThreadMessageProperties()
                             .WithAllowedMentions(new AllowedMentionsProperties().AddAllowedUsers(discordSnowflake))
-                            .WithComponents([summary.WithAccentColor(ColorHelpers.Info)])
+                            .WithComponents([summary.WithAccentColor(ColorHelpers.Info).WithComponents([
+                                ..summary.Components.ToList(),
+                                new ActionRowProperties([
+                                    new ButtonProperties($"buildapp_refresh_button:{appToDeny.ApplicationId}:{discordSnowflake}:{(int)ReviewInteractions.ReviewButtonInteractions.RefreshButtonMode.FullSummary}", "Refresh", ButtonStyle.Secondary)
+                                ])
+                            ])])
                             .WithFlags(MessageFlags.IsComponentsV2))
                     .WithAutoArchiveDuration(ThreadArchiveDuration.OneDay)
                 );
@@ -407,14 +426,14 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
             
             var dmChannel = await dmChannelTask;
             var userSummaryMsg = await restClient.SendMessageAsync(dmChannel.Id, new MessageProperties()
-                .WithComponents([summary.WithAccentColor(ColorHelpers.Failure)])
+                .WithComponents([summary.WithAccentColor(ColorHelpers.Failure).WithComponents(baseComponents)])
                 .WithFlags(MessageFlags.IsComponentsV2)
                 .WithAllowedMentions(new AllowedMentionsProperties().AddAllowedUsers(discordSnowflake))
             );
             
             await restClient.SendMessageAsync(dmChannel.Id,
                 new MessageProperties()
-                    .WithContent($"<@{discordSnowflake}>")
+                    .WithContent(discordSnowflake.Mention())
                     .WithEmbeds([denialEmbed])
                     .WithAllowedMentions(new AllowedMentionsProperties().AddAllowedUsers(discordSnowflake))
                     .WithMessageReference(MessageReferenceProperties.Reply(userSummaryMsg.Id, false))
@@ -430,8 +449,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
         }
     }
 
-    public async Task<Result<ulong>> AcceptApplication(ulong discordSnowflake, Application appToAccept,
-        string? comments)
+    public async Task<Result<ulong>> AcceptApplication(ulong discordSnowflake, Application appToAccept, string? comments, bool writeApplicationStatus = true)
     {
         try
         {
@@ -444,9 +462,14 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
             var testRoleId = options.Value.TestBuildRoleId;
             var guildId = options.Value.GuildId;
             
-            var statusSetResult = await gfApiService.AddApplicationStatus(appToAccept.ApplicationId, "Approved", comments ?? "No additional comments.");
-            if (!statusSetResult.TryGetDataNonNull(out var newStatus))
-                return Result<ulong>.Failure($"Failed to set application status: {statusSetResult.ErrorMessage}", statusSetResult.StatusCode);
+            ApplicationStatus newStatus;
+            if (writeApplicationStatus)
+            {
+                var statusSetResult = await gfApiService.AddApplicationStatus(appToAccept.ApplicationId, "Approved", comments ?? "No additional comments.");
+                if (!statusSetResult.TryGetDataNonNull(out var writtenStatus))
+                    return Result<ulong>.Failure($"Failed to set application status: {statusSetResult.ErrorMessage}", statusSetResult.StatusCode);
+                newStatus = writtenStatus;
+            } else newStatus = appToAccept.LatestStatus ?? throw new Exception("Application has no status, and writeApplicationStatus is set to false, so there is no status to display in the summary.");
 
             var acceptanceEmbed = new EmbedProperties()
                 .WithTitle("Congratulations! Your application has been approved!")
@@ -454,12 +477,17 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
                     $"Welcome to The Greenfield Project! If you aren't whitelisted already, you should be shortly. Please read through the pinned messages for your next steps!")
                 .WithColor(ColorHelpers.Success);
 
-            var summary = await GenerateApplicationSummaryComponent(discordSnowflake, appToAccept, includeButtons: false, overrideStatus: newStatus);
+            var summary = await GenerateApplicationSummaryComponent(discordSnowflake, appToAccept, overrideStatus: newStatus);
             var channel = await restClient.CreateForumGuildThreadAsync(storageChannel,
                 new ForumGuildThreadProperties($"✅ App-{appToAccept.ApplicationId} | {user.Username}", 
                         new ForumGuildThreadMessageProperties()
                             .WithAllowedMentions(new AllowedMentionsProperties().AddAllowedUsers(discordSnowflake))
-                            .WithComponents([summary.WithAccentColor(ColorHelpers.Info)])
+                            .WithComponents([summary.WithAccentColor(ColorHelpers.Info).WithComponents([
+                                ..summary.Components.ToList(),
+                                new ActionRowProperties([
+                                    new ButtonProperties($"buildapp_refresh_button:{appToAccept.ApplicationId}:{discordSnowflake}:{(int)ReviewInteractions.ReviewButtonInteractions.RefreshButtonMode.FullSummary}", "Refresh", ButtonStyle.Secondary)
+                                ])
+                            ])])
                             .WithFlags(MessageFlags.IsComponentsV2))
                     .WithAutoArchiveDuration(ThreadArchiveDuration.OneDay)
                 );
