@@ -41,7 +41,7 @@ public class ApplyInteractions
     private static readonly EmbedProperties UserErrorApplicationAlreadyInProgress = GenericEmbeds.UserError("Greenfield Application Service",
         "You already have an application in progress. Please complete your existing application before starting a new one.");
     private static readonly EmbedProperties UserErrorApplicationAlreadyUnderReview = GenericEmbeds.UserError("Greenfield Application Service",
-        "Your application is already under review. You cannot start a new one until the current application has been processed.");
+        "Your application is already under review. You cannot start a new one until the current application has been processed. You can view all your applications by running the command `/applications list`.");
     private static readonly EmbedProperties UserErrorNoDiscordAccountsLinked = GenericEmbeds.UserError("Greenfield Application Service",
         "It appears you do not have any Discord accounts linked to the selected Minecraft account. Please link a Discord account and try again.");
     private static readonly EmbedProperties UserErrorCurrentDiscordAccountNotLinkedToSelectedUser = GenericEmbeds.UserError("Greenfield Application Service",
