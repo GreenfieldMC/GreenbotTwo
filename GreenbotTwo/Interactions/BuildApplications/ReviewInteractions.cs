@@ -31,6 +31,7 @@ public class ReviewInteractions
     
     private static readonly Func<long, EmbedProperties> CallbackBadRejectionComment = (appId) => 
         GenericEmbeds.UserError("Greenfield Application Service", $"No rejection reason was provided for rejecting application Id `{appId}`. Please provide at least one reason before rejecting.");
+    private static readonly EmbedProperties ErrorApplicationAlreadyReviewed = GenericEmbeds.UserError("Greenfield Application Service", "This application has already been reviewed. Please refresh the application summary to see the latest status.");
 
     #endregion
     
@@ -164,6 +165,12 @@ public class ReviewInteractions
                 return;
             }
 
+            if (application.IsApproved || application.IsRejected)
+            {
+                _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties().WithEmbeds([ErrorApplicationAlreadyReviewed]).WithFlags(MessageFlags.Ephemeral));
+                return;
+            }
+            
             var comments = Context.Components.FromLabel<TextInput>()?.Value;
             
             var approveApplicationResult = await applicationService.AcceptApplication(discordUserId, application, comments);
@@ -200,6 +207,12 @@ public class ReviewInteractions
             if (!actualApplicationResult.TryGetDataNonNull(out var application))
             {
                 _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties().WithEmbeds([CallbackApplicationNotFound(appId)]).WithFlags(MessageFlags.Ephemeral));
+                return;
+            }
+            
+            if (application.IsApproved || application.IsRejected)
+            {
+                _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties().WithEmbeds([ErrorApplicationAlreadyReviewed]).WithFlags(MessageFlags.Ephemeral));
                 return;
             }
 

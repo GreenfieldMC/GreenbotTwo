@@ -18,6 +18,47 @@ namespace GreenbotTwo.Services;
 
 public class ApplicationService(ILogger<IApplicationService> logger, IOptions<BuilderApplicationSettings> options, RestClient restClient, IGreenfieldApiService gfApiService) : IApplicationService
 {
+
+    #region Internal Error Embeds
+
+    private static readonly Func<long, string?, EmbedProperties> InternalErrorFailedToDownloadImages = (appId, error) =>
+        GenericEmbeds.InternalError("Greenfield Application Service",
+            $"Failed to download application images for application ID: {appId}. Error: {error}");
+    private static readonly Func<int, long, string, EmbedProperties> InternalErrorFailedToUpdateImageLinks = (failedCount, appId, errors) =>
+        GenericEmbeds.InternalError("Greenfield Application Service",
+            $"Failed to update {failedCount} application image links for application ID: {appId}. Errors: {errors}");
+    private static readonly Func<long, string?, EmbedProperties> InternalErrorFailedToSetStatusUnderReview = (appId, error) =>
+        GenericEmbeds.InternalError("Greenfield Application Service",
+            $"Failed to set application status to UnderReview for application ID: {appId}. Error: {error}");
+
+    #endregion
+
+    #region User Error Embeds
+
+    private static readonly Func<long, string?, EmbedProperties> UserErrorFailedToForwardApplication = (appId, error) =>
+        GenericEmbeds.UserError("Greenfield Application Service",
+            $"Failed to forward application ID: {appId}. Error: {error}");
+
+    #endregion
+
+    #region Application Decision Embeds
+
+    private static readonly Func<string, EmbedProperties> UserFacingDenialEmbed = (reason) => new EmbedProperties()
+        .WithTitle("About your application...")
+        .WithDescription(
+            $"Thank you for taking interest in joining The Greenfield Project. Unfortunately, we regret to inform you that your application was not approved. This could have been due to various reasons - we have outlined some of (if not all) of the reasons below:\n\n{reason}")
+        .WithColor(ColorHelpers.Failure);
+    private static readonly EmbedProperties UserFacingAcceptanceEmbed = new EmbedProperties()
+        .WithTitle("Congratulations! Your application has been approved!")
+        .WithDescription(
+            "Welcome to The Greenfield Project! If you aren't whitelisted already, you should be shortly. Please read through the pinned messages for your next steps!")
+        .WithColor(ColorHelpers.Success);
+    private static readonly Func<string, EmbedProperties> StaffFacingDenialEmbed = (reason) =>
+        GenericEmbeds.Info("Application Denied", $"Reasons: \n\n{reason}");
+    private static readonly Func<string?, EmbedProperties> StaffFacingAcceptanceEmbed = (comments) =>
+        GenericEmbeds.Info("Application Accepted", $"Reasons: \n\n{comments ?? "None provided."}");
+
+    #endregion
     
     private static readonly IDictionary<ulong, BuilderApplicationForm> Applications = new ConcurrentDictionary<ulong, BuilderApplicationForm>();
     
@@ -157,10 +198,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
             {
                 await restClient.SendMessageAsync(forwardChannelId,
                     new MessageProperties()
-                        .WithEmbeds([
-                            GenericEmbeds.InternalError("Greenfield Application Service",
-                                $"Failed to download application images for application ID: {appToForward.ApplicationId}. Error: {downloadedImagesResult.ErrorMessage}")
-                        ])
+                        .WithEmbeds([InternalErrorFailedToDownloadImages(appToForward.ApplicationId, downloadedImagesResult.ErrorMessage)])
                 );
                 return Result.Failure(downloadedImagesResult.ErrorMessage ?? "Failed to download application images.", downloadedImagesResult.StatusCode);
             }
@@ -224,10 +262,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
                 var errorMessages = string.Join("; ", failedUpdates.Select(r => r.ErrorMessage));
                 await restClient.SendMessageAsync(forwardChannelId,
                     new MessageProperties()
-                        .WithEmbeds([
-                            GenericEmbeds.InternalError("Greenfield Application Service",
-                                $"Failed to update {failedUpdates.Count} application image links for application ID: {appToForward.ApplicationId}. Errors: {errorMessages}")
-                        ])
+                        .WithEmbeds([InternalErrorFailedToUpdateImageLinks(failedUpdates.Count, appToForward.ApplicationId, errorMessages)])
                 );
             }
             
@@ -236,10 +271,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
             {
                 await restClient.SendMessageAsync(forwardChannelId,
                     new MessageProperties()
-                        .WithEmbeds([
-                            GenericEmbeds.InternalError("Greenfield Application Service",
-                                $"Failed to set application status to UnderReview for application ID: {appToForward.ApplicationId}. Error: {statusUpdateResult.ErrorMessage}")
-                        ])
+                        .WithEmbeds([InternalErrorFailedToSetStatusUnderReview(appToForward.ApplicationId, statusUpdateResult.ErrorMessage)])
                 );
             }
 
@@ -273,8 +305,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
             {
                 await restClient.SendMessageAsync(forwardChannelId,
                     new MessageProperties().WithEmbeds([
-                        GenericEmbeds.UserError("Greenfield Application Service",
-                            $"Failed to forward application ID: {appToForward.ApplicationId}. Error: {e.Message}")
+                        UserErrorFailedToForwardApplication(appToForward.ApplicationId, e.Message)
                     ]));
             }
             catch (Exception e2)
@@ -392,11 +423,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
                 newStatus = writtenStatus;
             } else newStatus = appToDeny.LatestStatus ?? throw new Exception("Application has no status, and writeApplicationStatus is set to false, so there is no status to display in the summary.");
             
-            var denialEmbed = new EmbedProperties()
-                .WithTitle("About your application...")
-                .WithDescription(
-                    $"Thank you for taking interest in joining The Greenfield Project. Unfortunately, we regret to inform you that your application was not approved. This could have been due to various reasons - we have outlined some of (if not all) of the reasons below:\n\n{reason}")
-                .WithColor(ColorHelpers.Failure);
+            var denialEmbed = UserFacingDenialEmbed(reason);
 
             var dmChannelTask = restClient.GetDMChannelAsync(discordSnowflake);
             var summary = await GenerateApplicationSummaryComponent(discordSnowflake, appToDeny, overrideStatus: newStatus);
@@ -419,7 +446,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
             
             _ = restClient.SendMessageAsync(channel.Id,
                 new MessageProperties()
-                    .WithEmbeds([GenericEmbeds.Info("Application Denied", $"Reasons: \n\n{reason}")])
+                    .WithEmbeds([StaffFacingDenialEmbed(reason)])
                     .WithMessageReference(MessageReferenceProperties.Reply(channel.Id, false))
                     .WithAllowedMentions(new AllowedMentionsProperties().AddAllowedUsers(discordSnowflake))
             );
@@ -471,11 +498,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
                 newStatus = writtenStatus;
             } else newStatus = appToAccept.LatestStatus ?? throw new Exception("Application has no status, and writeApplicationStatus is set to false, so there is no status to display in the summary.");
 
-            var acceptanceEmbed = (ulong id) => new EmbedProperties()
-                .WithTitle("Congratulations! Your application has been approved!")
-                .WithDescription(
-                    $"{id.Mention()}, welcome to The Greenfield Project! If you aren't whitelisted already, you should be shortly. Please read through the pinned messages for your next steps!")
-                .WithColor(ColorHelpers.Success);
+            var acceptanceEmbed = UserFacingAcceptanceEmbed;
 
             var summary = await GenerateApplicationSummaryComponent(discordSnowflake, appToAccept, overrideStatus: newStatus);
             var channel = await restClient.CreateForumGuildThreadAsync(storageChannel,
@@ -494,14 +517,14 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
             
             _ = restClient.SendMessageAsync(channel.Id,
                 new MessageProperties()
-                    .WithEmbeds([GenericEmbeds.Info("Application Accepted", $"The applicant {discordSnowflake.Mention()} has been approved. Additional comments (if any): \n\n{comments ?? "None provided."}")])
+                    .WithEmbeds([StaffFacingAcceptanceEmbed(comments)])
                     .WithMessageReference(MessageReferenceProperties.Reply(channel.Id, false))
                     .WithAllowedMentions(new AllowedMentionsProperties().AddAllowedUsers(discordSnowflake))
             );
 
             await Task.Delay(100);
 
-            await restClient.SendMessageAsync(testBuilderChannel, new MessageProperties().WithEmbeds([acceptanceEmbed(discordSnowflake)]).WithAllowedMentions(new AllowedMentionsProperties().AddAllowedUsers(discordSnowflake)));
+            await restClient.SendMessageAsync(testBuilderChannel, new MessageProperties().WithContent(discordSnowflake.Mention()).WithEmbeds([acceptanceEmbed]).WithAllowedMentions(new AllowedMentionsProperties().AddAllowedUsers(discordSnowflake)));
             await restClient.AddGuildUserRoleAsync(guildId, discordSnowflake, testRoleId, new RestRequestProperties().WithAuditLogReason("Builder application accepted"));
             
             return Result<ulong>.Success(channel.Id);
