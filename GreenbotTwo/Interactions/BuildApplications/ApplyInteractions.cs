@@ -313,7 +313,7 @@ public class ApplyInteractions
     /// <param name="applicationService"></param>
     /// <param name="mojangService"></param>
     /// <param name="restClient"></param>
-    public class ApplyModalInteractions(IOptions<BuilderApplicationSettings> buildAppSettings, IApplicationService applicationService, IMojangService mojangService, RestClient restClient, IGreenfieldApiService gfApiService) : ComponentInteractionModule<ModalInteractionContext>
+    public class ApplyModalInteractions(IOptions<BuilderApplicationSettings> buildAppSettings, IApplicationService applicationService, IGreenfieldApiService gfApiService) : ComponentInteractionModule<ModalInteractionContext>
     {
         
         /// <summary>
@@ -363,7 +363,7 @@ public class ApplyInteractions
             var isInProgress = applicationService.HasApplicationInProgress(Context.User.Id);
             if (!isInProgress)
             {
-                await Context.Interaction.SendModifyResponse([UserErrorNoApplicationInProgress], []);
+                await Context.Interaction.ModifyResponse([UserErrorNoApplicationInProgress], []);
                 return;
             }
             
@@ -397,7 +397,7 @@ public class ApplyInteractions
             var isInProgress = applicationService.HasApplicationInProgress(Context.User.Id);
             if (!isInProgress)
             {
-                await Context.Interaction.SendModifyResponse([UserErrorNoApplicationInProgress], []);
+                await Context.Interaction.ModifyResponse([UserErrorNoApplicationInProgress], []);
                 return;
             }
 
@@ -459,7 +459,7 @@ public class ApplyInteractions
             var isInProgress = applicationService.HasApplicationInProgress(Context.User.Id);
             if (!isInProgress)
             {
-                await Context.Interaction.SendModifyResponse([UserErrorNoApplicationInProgress], []);
+                await Context.Interaction.ModifyResponse([UserErrorNoApplicationInProgress], []);
                 return;
             }
 
@@ -488,7 +488,7 @@ public class ApplyInteractions
             var isInProgress = applicationService.HasApplicationInProgress(Context.User.Id);
             if (!isInProgress)
             {
-                await Context.Interaction.SendModifyResponse(components: [], embeds: [UserErrorNoApplicationInProgress]);
+                await Context.Interaction.ModifyResponse(components: [], embeds: [UserErrorNoApplicationInProgress]);
                 return;
             }
            
@@ -498,7 +498,7 @@ public class ApplyInteractions
             if (!application.IsComplete()) 
             {
                 applicationService.ClearInProgressApplication(Context.User.Id);
-                await Context.Interaction.SendModifyResponse(components: [], embeds: [InternalErrorApplicationSubmitCalledWhenComplete]);
+                await Context.Interaction.ModifyResponse(components: [], embeds: [InternalErrorApplicationSubmitCalledWhenComplete]);
                 return;
             }
 
@@ -508,7 +508,7 @@ public class ApplyInteractions
             if (!submitResult.TryGetDataNonNull(out var appId))
             {
                 application.Submitted = false;
-                await Context.Interaction.SendModifyResponse([ApplicationStartEmbed, InternalErrorSubmissionFailure(submitResult)], [new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())]);
+                await Context.Interaction.ModifyResponse([ApplicationStartEmbed, InternalErrorSubmissionFailure(submitResult)], [new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())]);
                 return;
             }
             
@@ -516,7 +516,7 @@ public class ApplyInteractions
             if (!submittedAppResponse.TryGetDataNonNull(out var submittedApplication))
             {
                 application.Submitted = false;
-                await Context.Interaction.SendModifyResponse([ApplicationStartEmbed, InternalErrorApplicationRetrievalFailure(submittedAppResponse)], [new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())]);
+                await Context.Interaction.ModifyResponse([ApplicationStartEmbed, InternalErrorApplicationRetrievalFailure(submittedAppResponse)], [new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())]);
                 return;
             }
             
