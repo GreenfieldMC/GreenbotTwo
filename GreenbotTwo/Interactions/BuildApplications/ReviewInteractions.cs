@@ -7,6 +7,7 @@ using GreenbotTwo.Services;
 using GreenbotTwo.Services.Interfaces;
 using Microsoft.Extensions.Options;
 using NetCord;
+using NetCord.Gateway;
 using NetCord.Rest;
 using NetCord.Services.ComponentInteractions;
 // ReSharper disable UnusedMember.Global
@@ -34,6 +35,14 @@ public class ReviewInteractions
     private static readonly EmbedProperties ErrorApplicationAlreadyReviewed = GenericEmbeds.UserError("Greenfield Application Service", "This application has already been reviewed. Please refresh the application summary to see the latest status.");
 
     #endregion
+
+    private static readonly EmbedProperties ErrorInsufficientPermissions = GenericEmbeds.UserError("Insufficient Permissions", "You do not have the required role to perform this action.");
+
+    private static bool HasAnyRole(User user, Guild? guild, IEnumerable<ulong> allowedRoleIds)
+    {
+        if (guild is null || user is not GuildUser guildUser) return false;
+        return guildUser.GetRoles(guild).Any(r => allowedRoleIds.Contains(r.Id));
+    }
     
     public class ReviewButtonInteractions(IGreenfieldApiService apiService, IApplicationService applicationService, IOptions<BuilderApplicationSettings> options) : ComponentInteractionModule<ButtonInteractionContext>
     {
@@ -47,6 +56,9 @@ public class ReviewInteractions
         [ComponentInteraction("buildapp_approve_button")]
         public InteractionCallbackProperties ApproveApplicationButton(long appId, ulong discordUserId)
         {
+            if (!HasAnyRole(Context.User, Context.Guild, options.Value.ReviewSettings.RolesThatCanApprove))
+                return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([ErrorInsufficientPermissions]).WithFlags(MessageFlags.Ephemeral));
+            
             return InteractionCallback.Modal(new ModalProperties($"buildapp_approve_modal:{appId}:{discordUserId}", "Approve Build Application").WithComponents( [
                 new TextDisplayProperties($"You are about to approve the application for {discordUserId.Mention()} (Application ID: {appId})."),
                 new LabelProperties("Additional Comments", new TextInputProperties("additional_comments", TextInputStyle.Paragraph)
@@ -58,6 +70,9 @@ public class ReviewInteractions
         [ComponentInteraction("buildapp_reject_button")]
         public InteractionCallbackProperties RejectApplicationButton(long appId, ulong discordUserId)
         {
+            if (!HasAnyRole(Context.User, Context.Guild, options.Value.ReviewSettings.RolesThatCanDeny))
+                return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([ErrorInsufficientPermissions]).WithFlags(MessageFlags.Ephemeral));
+            
             return InteractionCallback.Modal(new ModalProperties($"buildapp_reject_modal:{appId}:{discordUserId}", "Reject Build Application").WithComponents([
                 new TextDisplayProperties($"You are about to reject the application for {discordUserId.Mention()} (Application ID: {appId}). Please provide a reason for rejection below."),
                 new LabelProperties("Custom Rejection Reason", new TextInputProperties("custom_rejection_reason", TextInputStyle.Paragraph).WithRequired(false).WithMaxLength(1024)),
@@ -80,6 +95,9 @@ public class ReviewInteractions
         [ComponentInteraction("buildapp_refresh_button")]
         public async Task<InteractionCallbackProperties> RefreshApplicationSummaryButton(long appId, ulong discordUserId, RefreshButtonMode refreshMode)
         {
+            if (!HasAnyRole(Context.User, Context.Guild, options.Value.ReviewSettings.RolesThatCanRefresh))
+                return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([ErrorInsufficientPermissions]).WithFlags(MessageFlags.Ephemeral));
+            
             var applicationResult = await apiService.GetApplicationById(appId);
             if (!applicationResult.TryGetDataNonNull(out var application))
             {
@@ -150,12 +168,18 @@ public class ReviewInteractions
         
     }
     
-    public class ReviewModalInteractions(IApplicationService applicationService, IGreenfieldApiService gfApiService, RestClient restClient) : ComponentInteractionModule<ModalInteractionContext>
+    public class ReviewModalInteractions(IApplicationService applicationService, IGreenfieldApiService gfApiService, RestClient restClient, IOptions<BuilderApplicationSettings> options) : ComponentInteractionModule<ModalInteractionContext>
     {
         
         [ComponentInteraction("buildapp_approve_modal")]
         public async Task ApproveApplicationModal(long appId, ulong discordUserId)
         {
+            if (!HasAnyRole(Context.User, Context.Guild, options.Value.ReviewSettings.RolesThatCanApprove))
+            {
+                await Context.Interaction.SendResponseAsync(InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([ErrorInsufficientPermissions]).WithFlags(MessageFlags.Ephemeral)));
+                return;
+            }
+            
             await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredModifyMessage);
             
             var actualApplicationResult = await gfApiService.GetApplicationById(appId);
@@ -201,6 +225,12 @@ public class ReviewInteractions
         [ComponentInteraction("buildapp_reject_modal")]
         public async Task RejectApplicationModal(long appId, ulong discordUserId)
         {
+            if (!HasAnyRole(Context.User, Context.Guild, options.Value.ReviewSettings.RolesThatCanDeny))
+            {
+                await Context.Interaction.SendResponseAsync(InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([ErrorInsufficientPermissions]).WithFlags(MessageFlags.Ephemeral)));
+                return;
+            }
+            
             await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredModifyMessage);
 
             var actualApplicationResult = await gfApiService.GetApplicationById(appId);
