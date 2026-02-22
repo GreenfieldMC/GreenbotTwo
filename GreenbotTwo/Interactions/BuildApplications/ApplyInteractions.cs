@@ -22,9 +22,10 @@ public class ApplyInteractions
     #region  Normal Application Embeds
 
     public static readonly EmbedProperties ApplicationStartEmbed = GenericEmbeds.Info("Greenfield Application Service",
-        "Hi! Welcome to Greenfield, and thank you for considering becoming a build member! Please complete all sections of the application by clicking the buttons below and filling out each required form.\n\nIf you have any questions or concerns about the application process, please ask a Staff member for assistance. Your progress before final submission (except for image uploads) will be saved.\n\nGood Luck!");
-    private static readonly EmbedProperties ApplicationSubmitEmbed = GenericEmbeds.Success("Greenfield Application Service",
-        "Thank you for submitting your application to join the Greenfield Build Team! We appreciate your interest and the time you've taken to apply. Your application is processing; we will be in touch with you regarding the status of your application as soon as possible. To view the status of your application, you may use the command `/appstatus`. Good luck!");
+        "Hi! Welcome to Greenfield, and thank you for considering becoming a build member! Please complete all sections of the application by clicking the buttons below and filling out each required form.\n\nIf you have any questions or concerns about the application process, please ask a Staff member for assistance. Your progress before final submission (except for image uploads) will be saved.\n\nGood Luck!")
+        .WithFooter(new EmbedFooterProperties().WithText("You may stop the application at any time before submission by running /apply cancel"));
+    private static readonly Func<long,EmbedProperties> ApplicationSubmitEmbed = appId => GenericEmbeds.Success("Greenfield Application Service",
+        $"Thank you for submitting your application to join the Greenfield Build Team! We appreciate your interest and the time you've taken to apply. Your application is processing; we will be in touch with you regarding the status of your application as soon as possible. To view the status of your application, you may use the command `/application view {appId}`. Good luck!");
     private static readonly EmbedProperties ApplicationPreparingEmbed = GenericEmbeds.Info("Greenfield Application Service",
         "Preparing your application...");
     
@@ -33,9 +34,9 @@ public class ApplyInteractions
     #region User Error Embeds
 
     private static readonly EmbedProperties UserErrorNoApplicationInProgress = GenericEmbeds.UserError("Greenfield Application Service",
-        "It appears you do not have an application in progress. To start a new application, use `/apply`.");
+        "It appears you do not have an application in progress. To start a new application, use `/apply start`.");
     private static readonly EmbedProperties UserErrorTermsOfServiceDisagreement = GenericEmbeds.UserError("Greenfield Application Service",
-        "Sorry, but you must agree with our Terms and Conditions to be considered a build team member. Your application has been declined - you may start a new application at any time by using `/apply`!");
+        "Sorry, but you must agree with our Terms and Conditions to be considered a build team member. Your application has been declined - you may start a new application at any time by using `/apply start`!");
     private static readonly EmbedProperties UserErrorUnknownUser = GenericEmbeds.UserError("Greenfield Application Service",
         "We were unable to find a user associated with the selected account. Please try again with a different user.");
     private static readonly EmbedProperties UserErrorApplicationAlreadyInProgress = GenericEmbeds.UserError("Greenfield Application Service",
@@ -63,7 +64,7 @@ public class ApplyInteractions
     #region Internal Error Embeds
 
     private static readonly EmbedProperties InternalErrorApplicationSubmitCalledWhenComplete = GenericEmbeds.InternalError("Internal Application Error", 
-        "Your application is not yet complete. Tossing the current application (you shouldn't have been able to reach this step) - please start a new application using `/apply` and ensure all sections are completed before submitting.");
+        "Your application is not yet complete. Tossing the current application (you shouldn't have been able to reach this step) - please start a new application using `/apply start` and ensure all sections are completed before submitting.");
     private static readonly Func<Result<long>, EmbedProperties> InternalErrorSubmissionFailure = (submitResult) => GenericEmbeds.InternalError("Internal Application Error",
             $"There was an error while trying to submit your application: {submitResult.ErrorMessage ?? $"Submit was {(submitResult.IsSuccessful ? "" : "not")} successful. Result was {submitResult.GetNonNullOrThrow()}"}. Report this error to NJDaeger.")
         .WithFooter(new EmbedFooterProperties().WithText("Sorry about this inconvenience!"));
@@ -522,7 +523,7 @@ public class ApplyInteractions
             
             _ = applicationService.CompleteAndForwardApplicationToReview(Context.User.Id, submittedApplication);
             
-            await Context.Interaction.ModifyResponse([ApplicationSubmitEmbed], [new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())]);
+            await Context.Interaction.ModifyResponse([ApplicationSubmitEmbed(appId)], [new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())]);
             
         }
     }

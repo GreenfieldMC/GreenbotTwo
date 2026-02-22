@@ -59,7 +59,7 @@ public class ReviewInteractions
         {
             return InteractionCallback.Modal(new ModalProperties($"buildapp_reject_modal:{appId}:{discordUserId}", "Reject Build Application").WithComponents([
                 new TextDisplayProperties($"You are about to reject the application for {discordUserId.Mention()} (Application ID: {appId}). Please provide a reason for rejection below."),
-                new LabelProperties("Custom Rejection Reason", new TextInputProperties("custom_rejection_reason", TextInputStyle.Paragraph).WithRequired(false)),
+                new LabelProperties("Custom Rejection Reason", new TextInputProperties("custom_rejection_reason", TextInputStyle.Paragraph).WithRequired(false).WithMaxLength(1024)),
                 new LabelProperties("Standard Rejection Reasons", new CheckboxGroupProperties("defined_rejection_reasons")
                     .WithRequired(false)
                     .WithMinValues(0)

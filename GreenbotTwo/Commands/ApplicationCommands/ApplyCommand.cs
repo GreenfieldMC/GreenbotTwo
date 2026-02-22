@@ -10,12 +10,16 @@ using NetCord.Services.ApplicationCommands;
 
 namespace GreenbotTwo.Commands.ApplicationCommands;
 
+[SlashCommand("apply", "Apply to join the Greenfield team")]
 public class ApplyCommand(IApplicationService applicationService, IGreenfieldApiService apiService, IAccountLinkService accountLinkService, ILogger<IApplicationCommandContext> commandLogger) : ApplicationCommandModule<ApplicationCommandContext> 
 {
     
     private static readonly EmbedProperties InternalErrorGettingLinkedUsers = GenericEmbeds.InternalError("Greenfield Application Service", "An internal error occurred while trying to fetch your linked accounts. Please try again later.");
+    private static readonly EmbedProperties NoApplicationInProgress = GenericEmbeds.UserError("Greenfield Application Service", "You do not have an application in progress to cancel.");
+    private static readonly EmbedProperties ApplicationAlreadySubmitted = GenericEmbeds.UserError("Greenfield Application Service", "Your application has already been submitted and cannot be cancelled.");
+    private static readonly EmbedProperties ApplicationCancelled = GenericEmbeds.Success("Greenfield Application Service", "Your in-progress application has been cancelled.");
     
-    [SlashCommand("apply", "Apply to join the Greenfield team")]
+    [SubSlashCommand("start", "Start a new application to join the Greenfield team")]
     public async Task Apply()
     {
         commandLogger.LogCommandExecution(Context);
@@ -55,6 +59,32 @@ public class ApplyCommand(IApplicationService applicationService, IGreenfieldApi
         commandLogger.LogCommandDebug(Context, $"Resuming in-progress application for user {Context.User.Username} ({Context.User.Id}).");
         var application = applicationService.GetApplication(Context.User.Id) ?? throw new InvalidOperationException("Application was expected to be in progress but could not be found.");
         await Context.Interaction.ModifyResponse([ApplyInteractions.ApplicationStartEmbed], [new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())]);
+    }
+    
+    [SubSlashCommand("cancel", "Cancel your current in-progress application")]
+    public async Task Cancel()
+    {
+        commandLogger.LogCommandExecution(Context);
+        await Context.Interaction.SendNotifyLoadingResponse(MessageFlags.Ephemeral);
+        
+        var application = applicationService.GetApplication(Context.User.Id);
+        if (application is null)
+        {
+            commandLogger.LogCommandDebug(Context, $"User {Context.User.Username} ({Context.User.Id}) attempted to cancel an application, but none was found.");
+            await Context.Interaction.ModifyResponse([NoApplicationInProgress]);
+            return;
+        }
+        
+        if (application.Submitted)
+        {
+            commandLogger.LogCommandDebug(Context, $"User {Context.User.Username} ({Context.User.Id}) attempted to cancel a submitted application.");
+            await Context.Interaction.ModifyResponse([ApplicationAlreadySubmitted]);
+            return;
+        }
+        
+        applicationService.ClearInProgressApplication(Context.User.Id);
+        commandLogger.LogCommandDebug(Context, $"User {Context.User.Username} ({Context.User.Id}) cancelled their in-progress application.");
+        await Context.Interaction.ModifyResponse([ApplicationCancelled]);
     }
     
 }
