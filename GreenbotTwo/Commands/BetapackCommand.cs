@@ -35,7 +35,7 @@ public class BetapackCommand(IOptions<BetapackCommandSettings> settings, IGreenf
 
         await Context.Interaction.ModifyResponseAsync(options =>
             options
-                .WithContent($"Your download for the **{selectedBranch}** branch is ready; it will expire in **{download.ExpiresInMinutes}** minutes!")
+                .WithContent($"Your one-time download link for the `{selectedBranch}` branch is ready; it will expire in <t:{DateTimeOffset.UtcNow.AddMinutes(download.ExpiresInMinutes):o}:R> if unused!")
                 .WithComponents([
                     new ActionRowProperties([
                         new LinkButtonProperties(download.DownloadUrl, "Download")
