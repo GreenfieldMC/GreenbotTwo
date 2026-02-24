@@ -135,4 +135,17 @@ public interface IGreenfieldApiService
     /// <returns></returns>
     Task<Result<List<ConnectionModels.ApiPatreonAccount>>> GetPatronAccountsForUser(long userId);
 
+    /// <summary>
+    /// /resource/resourcepack/branches [GET]
+    /// </summary>
+    /// <returns></returns>
+    Task<Result<IEnumerable<ResourcePackBranch>>> GetResourcePackBranches();
+
+    /// <summary>
+    /// /resource/resourcepack/download-request?branch={branch} [GET]
+    /// </summary>
+    /// <param name="branch"></param>
+    /// <returns></returns>
+    Task<Result<ResourcePackDownloadRequest>> GetResourcePackDownloadLink(string branch);
+
 }
