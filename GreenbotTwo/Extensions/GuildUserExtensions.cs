@@ -13,5 +13,10 @@ public static class GuildUserExtensions
     {
         return $"<@{user.Id}>";
     }
+
+    public static string Mention(this ulong userId)
+    {
+        return $"<@{userId}>";
+    }
     
 }

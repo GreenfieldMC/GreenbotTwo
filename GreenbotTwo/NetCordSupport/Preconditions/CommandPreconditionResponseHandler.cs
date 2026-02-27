@@ -7,7 +7,7 @@ using NetCord.Rest;
 using NetCord.Services;
 using NetCord.Services.ApplicationCommands;
 
-namespace GreenbotTwo.Preconditions;
+namespace GreenbotTwo.NetCordSupport.Preconditions;
 
 public class CommandPreconditionResponseHandler : IApplicationCommandResultHandler<ApplicationCommandContext>
 {

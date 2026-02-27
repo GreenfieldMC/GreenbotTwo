@@ -1,12 +1,16 @@
 using System.Text;
+using GreenbotTwo.Configuration.Models;
 using GreenbotTwo.Embeds;
 using GreenbotTwo.Extensions;
 using GreenbotTwo.Models;
 using GreenbotTwo.Services;
 using GreenbotTwo.Services.Interfaces;
+using Microsoft.Extensions.Options;
 using NetCord;
+using NetCord.Gateway;
 using NetCord.Rest;
 using NetCord.Services.ComponentInteractions;
+// ReSharper disable UnusedMember.Global
 
 namespace GreenbotTwo.Interactions.BuildApplications;
 
@@ -15,16 +19,8 @@ public class ReviewInteractions
 
     #region InternalErrors
 
-    private static readonly Func<string, EmbedProperties> CallbackUnableToParseAppId = (summaryTitle) => 
-        GenericEmbeds.InternalError("Internal Application Error", $"Unable to parse the application Id from application. See summary: `{summaryTitle}`");
     private static readonly Func<long, EmbedProperties> CallbackApplicationNotFound = (appIdString) => 
         GenericEmbeds.InternalError("Internal Application Error", $"Unable to retrieve the application with Id `{appIdString}`.");
-    private static readonly Func<long, string?, EmbedProperties> CallbackDiscordUserNotFound = (appId, errorMessage) => 
-        GenericEmbeds.InternalError("Internal Application Error", $"Unable to retrieve Discord user associated with application Id `{appId}`. Error: {errorMessage}");
-    private static readonly Func<long, EmbedProperties> CallbackNoDiscordUserAssociated = (appId) =>
-        GenericEmbeds.InternalError("Internal Application Error", $"No Discord user associated with application Id `{appId}`.");
-    private static readonly Func<long, EmbedProperties> CallbackNoDiscordAccountSelected = (appId) => 
-        GenericEmbeds.InternalError("Internal Application Error", $"No Discord account was selected for application Id `{appId}`.");
     private static readonly Func<long, string?, EmbedProperties> CallbackFailedToApproveApplication = (appId, errorMessage) => 
         GenericEmbeds.InternalError("Internal Application Error", $"Failed to approve application Id `{appId}`. Error: {errorMessage}");
     private static readonly Func<long, string?, EmbedProperties> CallbackFailedToRejectApplication = (appId, errorMessage) => 
@@ -36,10 +32,19 @@ public class ReviewInteractions
     
     private static readonly Func<long, EmbedProperties> CallbackBadRejectionComment = (appId) => 
         GenericEmbeds.UserError("Greenfield Application Service", $"No rejection reason was provided for rejecting application Id `{appId}`. Please provide at least one reason before rejecting.");
+    private static readonly EmbedProperties ErrorApplicationAlreadyReviewed = GenericEmbeds.UserError("Greenfield Application Service", "This application has already been reviewed. Please refresh the application summary to see the latest status.");
 
     #endregion
+
+    private static readonly EmbedProperties ErrorInsufficientPermissions = GenericEmbeds.UserError("Insufficient Permissions", "You do not have the required role to perform this action.");
+
+    private static bool HasAnyRole(User user, Guild? guild, IEnumerable<ulong> allowedRoleIds)
+    {
+        if (guild is null || user is not GuildUser guildUser) return false;
+        return guildUser.GetRoles(guild).Any(r => allowedRoleIds.Contains(r.Id));
+    }
     
-    public class ReviewButtonInteractions(IGreenfieldApiService gfApiService) : ComponentInteractionModule<ButtonInteractionContext>
+    public class ReviewButtonInteractions(IGreenfieldApiService apiService, IApplicationService applicationService, IOptions<BuilderApplicationSettings> options) : ComponentInteractionModule<ButtonInteractionContext>
     {
         
         [ComponentInteraction("button_does_nothing")]
@@ -49,139 +54,133 @@ public class ReviewInteractions
         }
         
         [ComponentInteraction("buildapp_approve_button")]
-        public async Task<InteractionCallbackProperties> ApproveApplicationButton()
+        public InteractionCallbackProperties ApproveApplicationButton(long appId, ulong discordUserId)
         {
+            if (!HasAnyRole(Context.User, Context.Guild, options.Value.ReviewSettings.RolesThatCanApprove))
+                return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([ErrorInsufficientPermissions]).WithFlags(MessageFlags.Ephemeral));
             
-            var applicationSummaryTitle = Context.Message.Components.OfType<ComponentContainer>().First().Components.OfType<TextDisplay>().First().Content;
-            var appIdString = applicationSummaryTitle.Split('#').Last().Trim();
-            if (!long.TryParse(appIdString, out var appId))
-                return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([CallbackUnableToParseAppId(appIdString)]));
-            
-            
-            var actualApplicationResult = await gfApiService.GetApplicationById(appId);
-            if (!actualApplicationResult.TryGetDataNonNull(out var application))
-                return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([CallbackApplicationNotFound(appId)]));
-            
-            
-            var discordUsersResult = await gfApiService.GetDiscordAccountsForUser(application.UserId);
-            if (!discordUsersResult.TryGetDataNonNull(out var discordUsers))
-                return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([CallbackDiscordUserNotFound(appId, discordUsersResult.ErrorMessage)]));
-
-            if (discordUsers.Count == 0)
-                return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([CallbackNoDiscordUserAssociated(appId)]));
-
-            IEnumerable<IModalComponentProperties> modalComponents;
-            var userMenuComponent = new UserMenuProperties("selected_discord_account")
-                .WithPlaceholder("Select a Discord account")
-                .WithDefaultValues(discordUsers.Select(u => u.DiscordSnowflake))
-                .WithMaxValues(1)
-                .WithMinValues(1);
-            var additionalComments = new LabelProperties("Additional Comments", new TextInputProperties("additional_comments", TextInputStyle.Paragraph)
-                .WithRequired(false)
-                .WithPlaceholder("Optional additional comments to save to the database on approval. The user will NOT see these."));
-
-            if (discordUsers.Count > 1)
-                modalComponents =
-                [
-                    new TextDisplayProperties($"Multiple Discord accounts are associated with the user who submitted application ID {appId}. Please select the correct account below."),
-                    new LabelProperties("Select Discord Account", userMenuComponent),
-                    additionalComments
-                ];
-            else
-                modalComponents =
-                [
-                    new TextDisplayProperties($"You are about to approve the application for <@{discordUsers[0].DiscordSnowflake}> (Application ID: {appId})."),
-                    new LabelProperties("Select Discord Account", userMenuComponent),
-                    additionalComments
-                ];
-
-            return InteractionCallback.Modal(new ModalProperties("buildapp_approve_modal", "Approve Build Application").WithComponents(modalComponents));
+            return InteractionCallback.Modal(new ModalProperties($"buildapp_approve_modal:{appId}:{discordUserId}", "Approve Build Application").WithComponents( [
+                new TextDisplayProperties($"You are about to approve the application for {discordUserId.Mention()} (Application ID: {appId})."),
+                new LabelProperties("Additional Comments", new TextInputProperties("additional_comments", TextInputStyle.Paragraph)
+                    .WithRequired(false)
+                    .WithPlaceholder("Optional additional comments to save to the database on approval. The user will NOT see these."))
+            ]));
         }
 
         [ComponentInteraction("buildapp_reject_button")]
-        public async Task<InteractionCallbackProperties> RejectApplicationButton()
+        public InteractionCallbackProperties RejectApplicationButton(long appId, ulong discordUserId)
         {
+            if (!HasAnyRole(Context.User, Context.Guild, options.Value.ReviewSettings.RolesThatCanDeny))
+                return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([ErrorInsufficientPermissions]).WithFlags(MessageFlags.Ephemeral));
             
-            var applicationSummaryTitle = Context.Message.Components.OfType<ComponentContainer>().First().Components.OfType<TextDisplay>().First().Content;
-            var appIdString = applicationSummaryTitle.Split('#').Last().Trim();
-            if (!long.TryParse(appIdString, out var appId))
-                return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([CallbackUnableToParseAppId(appIdString)]));
-            
-            
-            var actualApplicationResult = await gfApiService.GetApplicationById(appId);
-            if (!actualApplicationResult.TryGetDataNonNull(out var application))
-                return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([CallbackApplicationNotFound(appId)]));
-            
-            
-            var discordUsersResult = await gfApiService.GetDiscordAccountsForUser(application.UserId);
-            if (!discordUsersResult.TryGetDataNonNull(out var discordUsers))
-                return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([CallbackDiscordUserNotFound(appId, discordUsersResult.ErrorMessage)]));
-            
-            if (discordUsers.Count == 0)
-                return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([CallbackNoDiscordUserAssociated(appId)]));
-            
-
-            IEnumerable<IModalComponentProperties> baseModalComponents =
-            [
-                new LabelProperties("Custom Rejection Reason", new TextInputProperties("custom_rejection_reason", TextInputStyle.Paragraph).WithRequired(false)),
-                new LabelProperties("Standard Rejection Reasons", new StringMenuProperties("defined_rejection_reasons")
+            return InteractionCallback.Modal(new ModalProperties($"buildapp_reject_modal:{appId}:{discordUserId}", "Reject Build Application").WithComponents([
+                new TextDisplayProperties($"You are about to reject the application for {discordUserId.Mention()} (Application ID: {appId}). Please provide a reason for rejection below."),
+                new LabelProperties("Custom Rejection Reason", new TextInputProperties("custom_rejection_reason", TextInputStyle.Paragraph).WithRequired(false).WithMaxLength(1024)),
+                new LabelProperties("Standard Rejection Reasons", new CheckboxGroupProperties("defined_rejection_reasons")
                     .WithRequired(false)
                     .WithMinValues(0)
                     .WithMaxValues(StandardBuildAppFailureMessage.AllFailureMessages.Count())
-                    .WithOptions(StandardBuildAppFailureMessage.AllFailureMessages.Select(m => m.ToSelectOption()))
+                    .WithOptions(StandardBuildAppFailureMessage.AllFailureMessages.Select(m => m.ToCheckboxOption()))
                 )
-            ];
+            ]));
+        }
+        
+        /// <summary>
+        /// Refreshes the application summary component for the given application Id. This is used when the application has been updated and the reviewer needs the component updated.
+        /// </summary>
+        /// <param name="appId">Applicaiton being refreshed</param>
+        /// <param name="discordUserId">User who sent the application in</param>
+        /// <param name="refreshMode">The refresh mode. If null, it will attempt to resolve the fresh mode based on the latest application status.</param>
+        /// <returns></returns>
+        [ComponentInteraction("buildapp_refresh_button")]
+        public async Task<InteractionCallbackProperties> RefreshApplicationSummaryButton(long appId, ulong discordUserId, RefreshButtonMode refreshMode)
+        {
+            if (!HasAnyRole(Context.User, Context.Guild, options.Value.ReviewSettings.RolesThatCanRefresh))
+                return InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([ErrorInsufficientPermissions]).WithFlags(MessageFlags.Ephemeral));
             
-            var userMenuComponent = new UserMenuProperties("selected_discord_account")
-                .WithPlaceholder("Select a Discord account")
-                .WithDefaultValues(discordUsers.Select(u => u.DiscordSnowflake))
-                .WithMaxValues(1)
-                .WithMinValues(1);
-            
-            if (discordUsers.Count > 1)
+            var applicationResult = await apiService.GetApplicationById(appId);
+            if (!applicationResult.TryGetDataNonNull(out var application))
             {
-                var additionalComponents = new List<IModalComponentProperties>
-                {
-                    new TextDisplayProperties(
-                        $"Multiple Discord accounts are associated with the user who submitted application ID {appId}. Please select the correct account below."),
-                    new LabelProperties("Select Discord Account", userMenuComponent)
-                };
-                additionalComponents.AddRange(baseModalComponents);
-                baseModalComponents = additionalComponents;
+                return InteractionCallback.Message(new InteractionMessageProperties()
+                    .WithEmbeds([CallbackApplicationNotFound(appId)])
+                    .WithFlags(MessageFlags.Ephemeral));
             }
-            else
+
+            ComponentContainerProperties summaryComponent;
+
+            if (refreshMode == RefreshButtonMode.FullSummary)
             {
-                var additionalComponents = new List<IModalComponentProperties>
+                summaryComponent = await applicationService.GenerateApplicationSummaryComponent(discordUserId, application);
+                summaryComponent
+                    .WithComponents([
+                        ..summaryComponent.Components.ToList(),
+                        new ActionRowProperties([
+                            new ButtonProperties($"buildapp_refresh_button:{appId}:{discordUserId}:{(int)RefreshButtonMode.FullSummary}", "Refresh", ButtonStyle.Secondary)
+                        ])
+                    ])
+                    .WithAccentColor(ColorHelpers.Info);
+            }
+            else //resolve summary
+            {
+                if (application.IsApproved || application.IsRejected)
                 {
-                    new TextDisplayProperties(
-                        $"You are about to reject the application for <@{discordUsers[0].DiscordSnowflake}> (Application ID: {appId}). Please provide a reason for rejection below."),
-                    new LabelProperties("Select Discord Account", userMenuComponent)
-                };
-                additionalComponents.AddRange(baseModalComponents);
-                baseModalComponents = additionalComponents;
+                    var forwardedChannelId = application.IsApproved
+                        ? await applicationService.AcceptApplication(discordUserId, application, application.LatestStatus?.StatusMessage, false)
+                        : await applicationService.DenyApplication(discordUserId, application, application.LatestStatus?.StatusMessage ?? "No reason provided.", false);
+                    summaryComponent = await applicationService.GenerateApplicationSummaryComponent(discordUserId, application, onlyShowBasicInfo: true);
+                    summaryComponent
+                        .WithAccentColor(application.IsApproved ? ColorHelpers.Success : ColorHelpers.Failure)
+                        .WithComponents([
+                            ..summaryComponent.Components.ToList(),
+                            new ActionRowProperties([
+                                application.IsApproved 
+                                    ? new ButtonProperties("button_does_nothing", "Approved!", EmojiProperties.Standard("✔️"), ButtonStyle.Success).WithDisabled() 
+                                    : new ButtonProperties("button_does_nothing", "Rejected!", EmojiProperties.Standard("✖️"), ButtonStyle.Danger).WithDisabled(),
+                                new LinkButtonProperties($"https://discord.com/channels/{Context.Guild?.Id}/{forwardedChannelId.GetNonNullOrThrow()}", "Go to Application")
+                            ])
+                        ]);
+                }
+                else
+                {
+                    summaryComponent = (await applicationService.GenerateApplicationSummaryComponent(discordUserId, application)).WithAccentColor(ColorHelpers.Info);
+                    summaryComponent
+                        .WithAccentColor(ColorHelpers.Info)
+                        .WithComponents([
+                            ..summaryComponent.Components.ToList(),
+                            new ActionRowProperties([
+                                new ButtonProperties($"buildapp_approve_button:{appId}:{discordUserId}", "Approve", ButtonStyle.Success),
+                                new ButtonProperties($"buildapp_reject_button:{appId}:{discordUserId}", "Reject", ButtonStyle.Danger),
+                                new ButtonProperties($"buildapp_refresh_button:{appId}:{discordUserId}:{(int)RefreshButtonMode.ResolveSummary}", "Refresh", ButtonStyle.Secondary)
+                            ])
+                        ]);
+                }
+                
             }
             
-            return InteractionCallback.Modal(new ModalProperties("buildapp_reject_modal", "Reject Build Application").WithComponents(baseModalComponents));
+            return InteractionCallback.ModifyMessage(options => options.WithComponents([summaryComponent]).WithFlags(MessageFlags.Ephemeral | MessageFlags.IsComponentsV2));
+        }
+
+        public enum RefreshButtonMode
+        {
+            FullSummary,
+            ResolveSummary
         }
         
     }
     
-    public class ReviewModalInteractions(IApplicationService applicationService, IGreenfieldApiService gfApiService, RestClient restClient) : ComponentInteractionModule<ModalInteractionContext>
+    public class ReviewModalInteractions(IApplicationService applicationService, IGreenfieldApiService gfApiService, RestClient restClient, IOptions<BuilderApplicationSettings> options) : ComponentInteractionModule<ModalInteractionContext>
     {
         
         [ComponentInteraction("buildapp_approve_modal")]
-        public async Task ApproveApplicationModal()
+        public async Task ApproveApplicationModal(long appId, ulong discordUserId)
         {
-            await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredModifyMessage);
-            
-            var applicationSummaryTitle = Context!.Interaction.Message!.Components.OfType<ComponentContainer>().First().Components.OfType<TextDisplay>().First().Content;
-            
-            var appIdString = applicationSummaryTitle.Split('#').Last().Trim();
-            if (!long.TryParse(appIdString, out var appId))
+            if (!HasAnyRole(Context.User, Context.Guild, options.Value.ReviewSettings.RolesThatCanApprove))
             {
-                _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties().WithEmbeds([CallbackUnableToParseAppId(appIdString)]));
+                await Context.Interaction.SendResponseAsync(InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([ErrorInsufficientPermissions]).WithFlags(MessageFlags.Ephemeral)));
                 return;
             }
+            
+            await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredModifyMessage);
             
             var actualApplicationResult = await gfApiService.GetApplicationById(appId);
             if (!actualApplicationResult.TryGetDataNonNull(out var application))
@@ -190,26 +189,24 @@ public class ReviewInteractions
                 return;
             }
 
-            var selectedDiscordAccounts = Context.Components.FromLabel<UserMenu>()?.SelectedValues;
-            if (selectedDiscordAccounts is null || selectedDiscordAccounts.Count == 0)
+            if (application.IsApproved || application.IsRejected)
             {
-                _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties().WithEmbeds([CallbackNoDiscordAccountSelected(appId)]));
+                _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties().WithEmbeds([ErrorApplicationAlreadyReviewed]).WithFlags(MessageFlags.Ephemeral));
                 return;
             }
             
-            var selectedDiscordAccount = selectedDiscordAccounts[0];
             var comments = Context.Components.FromLabel<TextInput>()?.Value;
             
-            var approveApplicationResult = await applicationService.AcceptApplication(selectedDiscordAccount.Id, application, comments);
+            var approveApplicationResult = await applicationService.AcceptApplication(discordUserId, application, comments);
             if (!approveApplicationResult.TryGetDataNonNull(out var acceptanceChannel))
             {
                 _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties().WithEmbeds([CallbackFailedToApproveApplication(appId, approveApplicationResult.ErrorMessage)]));
                 return;
             }
             
-            var summaryComponent = await applicationService.GenerateApplicationSummaryComponent(selectedDiscordAccount.Id, application, false, true);
+            var summaryComponent = await applicationService.GenerateApplicationSummaryComponent(discordUserId, application, true);
             
-            var messageId = Context.Interaction.Message.Id;
+            var messageId = Context.Interaction.Message!.Id;
             var channelId = Context.Channel.Id;
             _ = restClient.ModifyMessageAsync(channelId, messageId, options =>
             {
@@ -226,18 +223,15 @@ public class ReviewInteractions
         }
 
         [ComponentInteraction("buildapp_reject_modal")]
-        public async Task RejectApplicationModal()
+        public async Task RejectApplicationModal(long appId, ulong discordUserId)
         {
-            await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredModifyMessage);
-
-            var applicationSummaryTitle = Context!.Interaction.Message!.Components.OfType<ComponentContainer>().First().Components.OfType<TextDisplay>().First().Content;
-
-            var appIdString = applicationSummaryTitle.Split('#').Last().Trim();
-            if (!long.TryParse(appIdString, out var appId))
+            if (!HasAnyRole(Context.User, Context.Guild, options.Value.ReviewSettings.RolesThatCanDeny))
             {
-                _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties().WithEmbeds([CallbackUnableToParseAppId(appIdString)]).WithFlags(MessageFlags.Ephemeral));
+                await Context.Interaction.SendResponseAsync(InteractionCallback.Message(new InteractionMessageProperties().WithEmbeds([ErrorInsufficientPermissions]).WithFlags(MessageFlags.Ephemeral)));
                 return;
             }
+            
+            await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredModifyMessage);
 
             var actualApplicationResult = await gfApiService.GetApplicationById(appId);
             if (!actualApplicationResult.TryGetDataNonNull(out var application))
@@ -245,18 +239,15 @@ public class ReviewInteractions
                 _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties().WithEmbeds([CallbackApplicationNotFound(appId)]).WithFlags(MessageFlags.Ephemeral));
                 return;
             }
-
-            var selectedDiscordAccounts = Context.Components.FromLabel<UserMenu>()?.SelectedValues;
-            if (selectedDiscordAccounts is null || selectedDiscordAccounts.Count == 0)
+            
+            if (application.IsApproved || application.IsRejected)
             {
-                _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties().WithEmbeds([CallbackNoDiscordAccountSelected(appId)]).WithFlags(MessageFlags.Ephemeral));
+                _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties().WithEmbeds([ErrorApplicationAlreadyReviewed]).WithFlags(MessageFlags.Ephemeral));
                 return;
             }
 
-            var selectedDiscordAccount = selectedDiscordAccounts[0];
-
             var customRejectionReason = Context.Components.FromLabel<TextInput>()?.Value;
-            var definedRejectionReasons = Context.Components.FromLabel<StringMenu>()?.SelectedValues;
+            var definedRejectionReasons = Context.Components.FromLabel<CheckboxGroup>()?.CheckedValues;
 
             var commentResult = GetRejectionComment(customRejectionReason, definedRejectionReasons?.ToList());
             if (!commentResult.TryGetDataNonNull(out var comment))
@@ -265,16 +256,16 @@ public class ReviewInteractions
                 return;
             }
 
-            var denyApplicationResult = await applicationService.DenyApplication(selectedDiscordAccount.Id, application, comment);
+            var denyApplicationResult = await applicationService.DenyApplication(discordUserId, application, comment);
             if (!denyApplicationResult.TryGetDataNonNull(out var denialChannel))
             {
                 _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties().WithEmbeds([CallbackFailedToRejectApplication(appId, denyApplicationResult.ErrorMessage)]).WithFlags(MessageFlags.Ephemeral));
                 return;
             }
 
-            var summaryComponent = await applicationService.GenerateApplicationSummaryComponent(selectedDiscordAccount.Id, application, false, true);
+            var summaryComponent = await applicationService.GenerateApplicationSummaryComponent(discordUserId, application, true);
 
-            var messageId = Context.Interaction.Message.Id;
+            var messageId = Context.Interaction.Message!.Id;
             var channelId = Context.Channel.Id;
             _ = restClient.ModifyMessageAsync(channelId, messageId, options =>
             {
@@ -293,7 +284,7 @@ public class ReviewInteractions
 
         private static Result<string> GetRejectionComment(string? customReason, List<string>? definedReasons)
         {
-            if (string.IsNullOrWhiteSpace(customReason) && (definedReasons is null || !definedReasons.Any()))
+            if (string.IsNullOrWhiteSpace(customReason) && (definedReasons is null || definedReasons.Count == 0))
                 return Result<string>.Failure("No rejection reason provided.");
             
             var fullRejectionReason = new StringBuilder();

@@ -390,4 +390,46 @@ public class GreenfieldApiService(ILogger<IGreenfieldApiService> logger, HttpCli
             return Result<User>.Failure($"An error occurred while fetching the user: {ex.Message}", HttpStatusCode.InternalServerError);
         }
     }
+
+    /// <inheritdoc />
+    public async Task<Result<IEnumerable<ResourcePackBranch>>> GetResourcePackBranches()
+    {
+        try
+        {
+            var response = await httpClient.GetAsync("resource/resourcepack/branches");
+            
+            if (!response.IsSuccessStatusCode)
+                return Result<IEnumerable<ResourcePackBranch>>.Failure($"Failed to fetch resource pack branches. {response.ReasonPhrase ?? ""}", response.StatusCode);
+            
+            await using var responseStream = await response.Content.ReadAsStreamAsync();
+            var branches = await JsonSerializer.DeserializeAsync<IEnumerable<ResourcePackBranch>>(responseStream, JsonOptions);
+            return Result<IEnumerable<ResourcePackBranch>>.Success(branches ?? []);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "An error occurred while fetching resource pack branches.");
+            return Result<IEnumerable<ResourcePackBranch>>.Failure($"An error occurred while fetching resource pack branches: {ex.Message}", HttpStatusCode.InternalServerError);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<ResourcePackDownloadRequest>> GetResourcePackDownloadLink(string branch)
+    {
+        try
+        {
+            var response = await httpClient.PostAsync($"resource/resourcepack/download-request?branch={Uri.EscapeDataString(branch)}", null);
+            
+            if (!response.IsSuccessStatusCode)
+                return Result<ResourcePackDownloadRequest>.Failure($"Failed to generate resource pack download link. {response.ReasonPhrase ?? ""}", response.StatusCode);
+            
+            await using var responseStream = await response.Content.ReadAsStreamAsync();
+            var downloadRequest = await JsonSerializer.DeserializeAsync<ResourcePackDownloadRequest>(responseStream, JsonOptions);
+            return Result<ResourcePackDownloadRequest>.Success(downloadRequest!);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "An error occurred while generating a resource pack download link for branch {Branch}.", branch);
+            return Result<ResourcePackDownloadRequest>.Failure($"An error occurred while generating the download link: {ex.Message}", HttpStatusCode.InternalServerError);
+        }
+    }
 }

@@ -9,7 +9,7 @@ using GreenbotTwo.Interactions;
 using GreenbotTwo.Interactions.AccountLink;
 using GreenbotTwo.Interactions.BuildApplications;
 using GreenbotTwo.Models.Forms;
-using GreenbotTwo.Preconditions;
+using GreenbotTwo.NetCordSupport.Preconditions;
 using GreenbotTwo.Services;
 using GreenbotTwo.Services.Credentials;
 using GreenbotTwo.Services.Interfaces;
@@ -55,9 +55,13 @@ public static class StartupExtensions
     {
         configBuilder.SetBasePath(env.ContentRootPath)
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-            .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: false, reloadOnChange: true)
-            // .AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true)
-            .AddEnvironmentVariables();
+            .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional: false, reloadOnChange: true);
+        
+        //if there is a setting in the startup to --use-local-appsettings, also load the appsettings.local.json file
+        if (Environment.GetCommandLineArgs().Contains("--use-local-appsettings")) 
+            configBuilder.AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true);
+
+        configBuilder.AddEnvironmentVariables();
     }
 
     /// <summary>
@@ -75,8 +79,8 @@ public static class StartupExtensions
         services.AddOptionsWithValidateOnStart<BuilderApplicationSettings>()
             .BindConfiguration("BuilderApplicationSettings");
         services.Configure<CommandPermissionSettings>(config.GetSection("CommandPermissions"));
-        services.Configure<AppStatusSettings>(config.GetSection("CommandPermissions:AppStatus"));
-        services.Configure<ViewAppSettings>(config.GetSection("CommandPermissions:ViewApp"));
+        services.Configure<ApplicationCommandSettings>(config.GetSection("CommandPermissions:ApplicationCommand"));
+        services.Configure<AccountCommandSettings>(config.GetSection("CommandPermissions:AccountCommand"));
         return services;
     }
 
@@ -150,8 +154,7 @@ public static class StartupExtensions
         app.AddApplicationCommandModule<BetapackCommand>();
         app.AddApplicationCommandModule<ApplyCommand>();
         app.AddApplicationCommandModule<AccountsCommand>();
-        app.AddApplicationCommandModule<AppStatusCommand>();
-        app.AddApplicationCommandModule<ViewAppCommand>();
+        app.AddApplicationCommandModule<ApplicationsCommand>();
         return app;
     }
     

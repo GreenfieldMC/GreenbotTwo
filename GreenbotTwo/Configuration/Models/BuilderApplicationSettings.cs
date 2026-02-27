@@ -17,6 +17,7 @@ public class BuilderApplicationSettings : IValidateOptions<BuilderApplicationSet
     public required int MaximumAdditionalBuildingInfoLength { get; init; }
     public required int MaximumAdditionalCommentsLength { get; init; }
     public required long MaximumPerFileSizeBytes { get; init; }
+    public required ReviewSettings ReviewSettings { get; init; }
     
     public ValidateOptionsResult Validate(string? name, BuilderApplicationSettings options)
     {
@@ -34,6 +35,14 @@ public class BuilderApplicationSettings : IValidateOptions<BuilderApplicationSet
         
         var freeformTextLength = options.MaximumWhyJoinLength + options.MaximumAdditionalBuildingInfoLength + options.MaximumAdditionalCommentsLength;
         if (freeformTextLength > 3000) failures.Add("The combined length of freeform text fields cannot exceed 3000 characters.");
+
+        if (options.ReviewSettings is null) failures.Add("ReviewSettings must be configured.");
+        else
+        {
+            if (options.ReviewSettings.RolesThatCanApprove is null || !options.ReviewSettings.RolesThatCanApprove.Any()) failures.Add("ReviewSettings:RolesThatCanApprove must contain at least one role ID.");
+            if (options.ReviewSettings.RolesThatCanDeny is null || !options.ReviewSettings.RolesThatCanDeny.Any()) failures.Add("ReviewSettings:RolesThatCanDeny must contain at least one role ID.");
+            if (options.ReviewSettings.RolesThatCanRefresh is null || !options.ReviewSettings.RolesThatCanRefresh.Any()) failures.Add("ReviewSettings:RolesThatCanRefresh must contain at least one role ID.");
+        }
         
         return failures.Count > 0 ? ValidateOptionsResult.Fail(failures) : ValidateOptionsResult.Success;
     }

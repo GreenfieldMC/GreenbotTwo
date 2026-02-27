@@ -1,6 +1,9 @@
 using GreenbotTwo.Configuration.Models.Commands;
 using GreenbotTwo.Embeds;
 using GreenbotTwo.Extensions;
+using GreenbotTwo.NetCordSupport.AutocompleteProviders;
+using GreenbotTwo.Services.Interfaces;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NetCord;
 using NetCord.Rest;
@@ -8,67 +11,35 @@ using NetCord.Services.ApplicationCommands;
 
 namespace GreenbotTwo.Commands;
 
-public class BetapackCommand(IOptions<BetapackCommandSettings> settings) : ApplicationCommandModule<ApplicationCommandContext>
+public class BetapackCommand(IOptions<BetapackCommandSettings> settings, IGreenfieldApiService greenfieldApiService, ILogger<IApplicationCommandContext> logger) : ApplicationCommandModule<ApplicationCommandContext>
 {
     private readonly BetapackCommandSettings _settings = settings.Value;
-    
-    [SlashCommand("betapack", "Get instructions to install the beta version of the Greenfield Resource Pack.")]
+
+    [SlashCommand("betapack", "Download the beta version of the Greenfield Resource Pack.")]
     public async Task Betapack(
-        [SlashCommandParameter(Name = "run_for", Description = "The discord user who needs the install instructions.")] User? runFor = null)
+        [SlashCommandParameter(Name = "branch", Description = "The branch to download. Defaults to the configured default branch.", AutocompleteProviderType = typeof(BranchAutocompleteProvider))] string? branch = null)
     {
+        logger.LogCommandExecution(Context, branch is null ? null : $"branch: {branch}");
         await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        
-        var userWhoNeedsInstructions = runFor ?? Context.User;
 
-        var oneTimeDownloadConfig = _settings.OneTimeDownload;
-        var oneTimeDownloadMessage = new MessageProperties()
-            .WithContent($"{userWhoNeedsInstructions.Mention()}, {oneTimeDownloadConfig.MessageContent}")
-            .WithAllowedMentions(new AllowedMentionsProperties().AddAllowedUsers(userWhoNeedsInstructions.Id))
-            .WithEmbeds([
-                new EmbedProperties()
-                    .WithTitle(oneTimeDownloadConfig.Title)
-                    .WithFields(oneTimeDownloadConfig.GetEmbedFields())
-                    .WithColor(ColorHelpers.Info)
-            ]);
-        
-        var gitBasedDownloadConfig = _settings.GitBasedDownload;
-        var gitBasedDownloadMessage = new MessageProperties()
-            .WithContent($"{gitBasedDownloadConfig.MessageContent}")
-            .WithAllowedMentions(new AllowedMentionsProperties().AddAllowedUsers(userWhoNeedsInstructions.Id))
-            .WithEmbeds([
-                new EmbedProperties()
-                    .WithTitle(gitBasedDownloadConfig.Title)
-                    .WithFields(gitBasedDownloadConfig.GetEmbedFields())
-                    .WithColor(ColorHelpers.Info)
-            ]);
-        
-        var updatingThePackConfig = _settings.UpdatingThePack;
-        var updatingThePackMessage = new MessageProperties()
-            .WithContent($"{updatingThePackConfig.MessageContent}")
-            .WithAllowedMentions(new AllowedMentionsProperties().AddAllowedUsers(userWhoNeedsInstructions.Id))
-            .WithEmbeds([
-                new EmbedProperties()
-                    .WithTitle(updatingThePackConfig.Title)
-                    .WithFields(updatingThePackConfig.GetEmbedFields())
-                    .WithColor(ColorHelpers.Info)
-            ]);
+        var selectedBranch = branch ?? _settings.DefaultBranch;
 
-        if (userWhoNeedsInstructions.Id == Context.User.Id)
+        var downloadResult = await greenfieldApiService.GetResourcePackDownloadLink(selectedBranch);
+        if (!downloadResult.TryGetDataNonNull(out var download))
         {
+            logger.LogCommandError(Context, $"Failed to get download link for branch '{selectedBranch}'. Status code: {downloadResult.StatusCode}, Error: {downloadResult.ErrorMessage}");
             await Context.Interaction.ModifyResponseAsync(options =>
-                options
-                    .WithContent(oneTimeDownloadMessage.Content)
-                    .WithEmbeds(oneTimeDownloadMessage.Embeds)
-                    .WithAllowedMentions(oneTimeDownloadMessage.AllowedMentions)
-                );
-            await Context.Interaction.SendFollowupMessageAsync(gitBasedDownloadMessage.ToInteractionMessageProperties().WithFlags(MessageFlags.Ephemeral));
-            _ = Context.Interaction.SendFollowupMessageAsync(updatingThePackMessage.ToInteractionMessageProperties().WithFlags(MessageFlags.Ephemeral));
+                options.WithEmbeds([GenericEmbeds.InternalError("Download Failed", $"Failed to generate a download link for the `{selectedBranch}` branch.")]));
             return;
         }
 
-        var msg = await Context.Channel.SendMessageAsync(oneTimeDownloadMessage);
-        msg = await Context.Channel.SendMessageAsync(gitBasedDownloadMessage.WithMessageReference(MessageReferenceProperties.Reply(msg.Id)));
-        _ = Context.Channel.SendMessageAsync(updatingThePackMessage.WithMessageReference(MessageReferenceProperties.Reply(msg.Id)));
-
+        await Context.Interaction.ModifyResponseAsync(options =>
+            options
+                .WithContent($"Your one-time download link for the `{selectedBranch}` branch is ready; it will expire <t:{DateTimeOffset.UtcNow.AddMinutes(download.ExpiresInMinutes).ToUnixTimeSeconds()}:R> if unused!")
+                .WithComponents([
+                    new ActionRowProperties([
+                        new LinkButtonProperties(download.DownloadUrl, "Download")
+                    ])
+                ]));
     }
 }

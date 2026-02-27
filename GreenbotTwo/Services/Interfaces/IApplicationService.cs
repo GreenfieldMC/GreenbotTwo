@@ -1,3 +1,4 @@
+using GreenbotTwo.Interactions.BuildApplications;
 using GreenbotTwo.Models;
 using GreenbotTwo.Models.Forms;
 using GreenbotTwo.Models.GreenfieldApi;
@@ -80,18 +81,19 @@ public interface IApplicationService
     /// <param name="channelUrl"></param>
     /// <returns></returns>
     Task<Result<ComponentContainerProperties>> GenerateDiscordLinkComponent(long userId, string channelUrl);
-    
+
     /// <summary>
     /// Build a summary of the application to be forwarded for review as a component container.
     /// </summary>
     /// <param name="discordSnowflake">The discord user who submitted the application</param>
     /// <param name="appToForward">The application to build the summary for</param>
-    /// <param name="includeButtons">Whether to include action buttons in the summary</param>
     /// <param name="onlyShowBasicInfo">Whether to only show basic information in the summary</param>
     /// <param name="overrideImages">When uploading the images for the first time, they need to be attached like attachments rather than regular links.</param>
     /// <param name="overrideStatus">If provided, this status will be used instead of fetching the latest status from the application.</param>
     /// <returns></returns>
-    Task<ComponentContainerProperties> GenerateApplicationSummaryComponent(ulong discordSnowflake, Application appToForward, bool includeButtons = true, bool onlyShowBasicInfo = false, List<ApplicationImage>? overrideImages = null, ApplicationStatus? overrideStatus = null);
+    Task<ComponentContainerProperties> GenerateApplicationSummaryComponent(ulong discordSnowflake,
+        Application appToForward, bool onlyShowBasicInfo = false,
+        List<ApplicationImage>? overrideImages = null, ApplicationStatus? overrideStatus = null);
     //
     // /// <summary>
     // /// Forward the given application to review.
@@ -107,8 +109,10 @@ public interface IApplicationService
     /// <param name="discordSnowflake">The user to be notified of the denial</param>
     /// <param name="appToDeny">The application to deny</param>
     /// <param name="reason">The reason for the denial</param>
+    /// <param name="writeApplicationStatus"></param>
     /// <returns></returns>
-    Task<Result<ulong>> DenyApplication(ulong discordSnowflake, Application appToDeny, string reason);
+    Task<Result<ulong>> DenyApplication(ulong discordSnowflake, Application appToDeny, string reason,
+        bool writeApplicationStatus = true);
 
     /// <summary>
     /// Accept the given application.
@@ -116,7 +120,9 @@ public interface IApplicationService
     /// <param name="discordSnowflake">The user to be notified of the acceptance</param>
     /// <param name="appToAccept">The application to accept</param>
     /// <param name="comments">Optional comments to save in the application database.</param>
+    /// <param name="writeApplicationStatus"></param>
     /// <returns></returns>
-    Task<Result<ulong>> AcceptApplication(ulong discordSnowflake, Application appToAccept, string? comments);
+    Task<Result<ulong>> AcceptApplication(ulong discordSnowflake, Application appToAccept, string? comments,
+        bool writeApplicationStatus = true);
 
 }

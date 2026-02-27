@@ -13,6 +13,31 @@ public class Application
     public string? AdditionalComments { get; set; }
     public required DateTime CreatedOn { get; set; }
     
+    /// <summary>
+    /// The latest status of the application, determined by the most recent CreatedOn timestamp in the BuildAppStatuses list. If there are no statuses, this will be null.
+    /// </summary>
+    public ApplicationStatus? LatestStatus => BuildAppStatuses.OrderByDescending(s => s.CreatedOn).FirstOrDefault();
+    
+    /// <summary>
+    /// If this application's latest status is marked as rejected. False if there are no statuses or if the latest status is not "Rejected".
+    /// </summary>
+    public bool IsRejected => LatestStatus?.Status.Equals("Rejected", StringComparison.OrdinalIgnoreCase) ?? false;
+    
+    /// <summary>
+    /// If this application's latest status is marked as approved. False if there are no statuses or if the latest status is not "Approved".
+    /// </summary>
+    public bool IsApproved => LatestStatus?.Status.Equals("Approved", StringComparison.OrdinalIgnoreCase) ?? false;
+    
+    /// <summary>
+    /// If this application's latest status is marked as submission pending. False if there are no statuses or if the latest status is not "SubmissionPending".
+    /// </summary>
+    public bool IsSubmissionPending => LatestStatus?.Status.Equals("SubmissionPending", StringComparison.OrdinalIgnoreCase) ?? false;
+    
+    /// <summary>
+    /// If this application's latest status is marked as under review. False if there are no statuses or if the latest status is not "UnderReview".
+    /// </summary>
+    public bool IsUnderReview => LatestStatus?.Status.Equals("UnderReview", StringComparison.OrdinalIgnoreCase) ?? false;
+    
 }
 
 public record ApplicationStatus(string Status, string? StatusMessage = null, DateTime CreatedOn = default);

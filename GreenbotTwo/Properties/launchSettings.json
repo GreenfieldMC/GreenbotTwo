@@ -1,7 +1,15 @@
 {
   "$schema": "https://json.schemastore.org/launchsettings.json",
   "profiles": {
-    "local": {
+    "local-to-local": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      },
+      "commandLineArgs": "--use-local-appsettings"
+    },
+    "local-to-server": {
       "commandName": "Project",
       "dotnetRunMessages": true,
       "environmentVariables": {
