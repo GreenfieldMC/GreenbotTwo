@@ -178,7 +178,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
         }
     }
     
-    public async Task<Result> CompleteAndForwardApplicationToReview(ulong discordSnowflake, Application appToForward)
+    public async Task<Result> CompleteAndForwardApplicationToReview(ulong discordSnowflake, Application appToForward, bool bypassImageDownload = false)
     {
         var forwardChannelId = options.Value.ReviewChannelId;
 
@@ -188,9 +188,30 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
             new ButtonProperties($"buildapp_reject_button:{appToForward.ApplicationId}:{discordSnowflake}", "Reject", ButtonStyle.Danger),
             new ButtonProperties($"buildapp_refresh_button:{appToForward.ApplicationId}:{discordSnowflake}:{(int)ReviewInteractions.ReviewButtonInteractions.RefreshButtonMode.ResolveSummary}", "Refresh", ButtonStyle.Secondary)
         };
+
+        if (bypassImageDownload)
+        {
+            var summary = await GenerateApplicationSummaryComponent(discordSnowflake, appToForward);
+            var message = await restClient.SendMessageAsync(forwardChannelId,
+                new MessageProperties()
+                    .WithComponents([
+                        summary.WithAccentColor(ColorHelpers.Info).WithComponents([
+                            ..summary.Components.ToList(),
+                            new ActionRowProperties(reviewButtons)
+                        ])
+                    ])
+                    .WithFlags(MessageFlags.IsComponentsV2)
+            );
+            await Task.Delay(500);
+            await message.AddReactionAsync(new ReactionEmojiProperties("✅"));
+            await Task.Delay(500);
+            await message.AddReactionAsync(new ReactionEmojiProperties("❌"));
+            return Result.Success();
+        }
         
         try
         {
+            
             #region Download all images from application for saving
             
             var downloadedImagesResult = await DownloadImagesAsync(appToForward.Images);

@@ -71,8 +71,10 @@ public interface IApplicationService
     /// </summary>
     /// <param name="discordSnowflake">The discord user who submitted the application</param>
     /// <param name="appToForward">The application to complete and forward</param>
+    /// <param name="bypassImageDownload"></param>
     /// <returns></returns>
-    Task<Result> CompleteAndForwardApplicationToReview(ulong discordSnowflake, Application appToForward);
+    Task<Result> CompleteAndForwardApplicationToReview(ulong discordSnowflake, Application appToForward,
+        bool bypassImageDownload = false);
 
     /// <summary>
     /// Build a Discord link button as a component container. Used when the user has not linked their current discord account to their selected Minecraft account.
