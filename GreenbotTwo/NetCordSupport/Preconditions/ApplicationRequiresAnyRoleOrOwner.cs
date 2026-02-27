@@ -12,7 +12,7 @@ namespace GreenbotTwo.NetCordSupport.Preconditions;
 /// Marks a command parameter (for a command relating to Applications) as requiring the user to be either the application owner or have a specific role.
 /// </summary>
 /// <param name="configurationOptionName">The configuration key that contains the required role id.</param>
-public class ApplicationRequiresAnyRoleOrOwnerAttribute<T>(string configurationOptionName) : ParameterPreconditionAttribute<ApplicationCommandContext> where T : class
+public class ApplicationRequiresAnyRoleOrOwnerAttribute<T>(string configurationOptionName, bool onlyRoleCheck = false) : ParameterPreconditionAttribute<ApplicationCommandContext> where T : class
 {
     public override async ValueTask<PreconditionResult> EnsureCanExecuteAsync(object? value, ApplicationCommandContext context, IServiceProvider? serviceProvider)
     {
@@ -26,7 +26,7 @@ public class ApplicationRequiresAnyRoleOrOwnerAttribute<T>(string configurationO
         if (!userResult.TryGetDataNonNull(out var discordConnection)) 
             return PreconditionResult.Fail("There are no users linked to your Discord account.");
         
-        if (discordConnection.Users.Any(u => u.UserId == application.UserId))
+        if (!onlyRoleCheck && discordConnection.Users.Any(u => u.UserId == application.UserId))
             return PreconditionResult.Success;
         
         var commandSettings = serviceProvider?.GetService<IOptions<T>>() ?? throw new InvalidOperationException("IOptions<T> service is not available.");

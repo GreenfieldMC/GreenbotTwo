@@ -23,6 +23,13 @@ public class ApplicationsCommand(IGreenfieldApiService gfApiService, IMojangServ
     private static readonly EmbedProperties ErrorUnknownMinecraftUser = GenericEmbeds.UserError("Applications Error", "Unknown Minecraft user.");
     private static readonly EmbedProperties ErrorUnlinkedMinecraftUser = GenericEmbeds.UserError("Applications Error", "The specified Minecraft user was not found in the Greenfield user system.");
     private static readonly EmbedProperties ErrorUnknownApplicationUser = GenericEmbeds.UserError("Applications Error", "The user associated with this application could not be found.");
+    private static readonly EmbedProperties ErrorApplicationAlreadyReviewed = GenericEmbeds.UserError("Applications Error", "This application has already been approved or rejected and cannot be forwarded.");
+
+    private static EmbedProperties ApplicationForwardFailedEmbed(long applicationId, string? errorMessage) =>
+        GenericEmbeds.InternalError("Applications Error", $"Failed to forward application #{applicationId}. {errorMessage ?? "Please try again later."}");
+    
+    private static EmbedProperties ApplicationForwardSuccessEmbed(long applicationId) =>
+        GenericEmbeds.Info("Application Forwarded", $"Application #{applicationId} has been forwarded for review.");
 
     [SubSlashCommand("list", "List your applications.")]
     public async Task ListApplications()
@@ -181,6 +188,42 @@ public class ApplicationsCommand(IGreenfieldApiService gfApiService, IMojangServ
         {
             await Context.Interaction.SendFollowupResponse(embeds: [statusEmbed], flags: MessageFlags.Ephemeral);
         }
+    }
+    
+    [SubSlashCommand("forward", "Forward an application by its ID.")]
+    public async Task ForwardApplication(
+        [SlashCommandParameter(Name = "application_id", Description = "The ID of the application to forward.", TypeReaderType = typeof(ApplicationTypeReader<ApplicationCommandContext>))]
+        [ApplicationRequiresAnyRoleOrOwner<ApplicationCommandSettings>("RolesThatCanForwardOtherUserApps", true)]
+        Application application)
+    {
+        commandLogger.LogCommandExecution(Context, $"application_id: {application.ApplicationId}");
+        await Context.Interaction.SendNotifyLoadingResponse(MessageFlags.Ephemeral);
+
+        if (application.IsApproved || application.IsRejected)
+        {
+            await Context.Interaction.ModifyResponse(embeds: [ErrorApplicationAlreadyReviewed]);
+            return;
+        }
+
+        var userDiscordAccountResponse = await gfApiService.GetDiscordAccountsForUser(application.UserId);
+        if (!userDiscordAccountResponse.TryGetData(out var discordAccounts) || discordAccounts == null || discordAccounts.Count == 0)
+        {
+            commandLogger.LogCommandDebug(Context, $"Failed to fetch Discord accounts for user ID {application.UserId} associated with application ID {application.ApplicationId}. Status code: {userDiscordAccountResponse.StatusCode}, Error: {userDiscordAccountResponse.ErrorMessage}");
+            await Context.Interaction.ModifyResponse(embeds: [ErrorUnknownApplicationUser]);
+            return;
+        }
+
+        var discordSnowflake = discordAccounts.First().DiscordSnowflake;
+        var forwardResult = await applicationService.CompleteAndForwardApplicationToReview(discordSnowflake, application, true);
+
+        if (!forwardResult.IsSuccessful)
+        {
+            commandLogger.LogCommandDebug(Context, $"Failed to forward application ID {application.ApplicationId}. Status code: {forwardResult.StatusCode}, Error: {forwardResult.ErrorMessage}");
+            await Context.Interaction.ModifyResponse(embeds: [ApplicationForwardFailedEmbed(application.ApplicationId, forwardResult.ErrorMessage)]);
+            return;
+        }
+
+        await Context.Interaction.ModifyResponse(embeds: [ApplicationForwardSuccessEmbed(application.ApplicationId)]);
     }
     
 }
