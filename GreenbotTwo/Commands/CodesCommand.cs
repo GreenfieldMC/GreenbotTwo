@@ -57,7 +57,15 @@ public class CodesCommand(IGreenfieldApiService greenfieldApiService, ILogger<IA
         if (userWhoNeedsCodes.Id == Context.User.Id)
         {
             commandLogger.LogCommandDebug(Context, "User requested their own build codes.");
-            await Context.Interaction.ModifyResponseAsync(_ => message.ToInteractionMessageProperties());
+            await Context.Interaction.ModifyResponse([
+                new EmbedProperties()
+                    .WithTitle("Current Server Build Codes")
+                    .WithFields(buildCodes
+                        .OrderBy(c => c.ListOrder)
+                        .Select((code, idx) => new EmbedFieldProperties().WithInline(false).WithName(" ")
+                            .WithValue($"**__{idx + 1}.__)** {code.Code}"))
+                    )
+            ]);
             return;
         }
 
