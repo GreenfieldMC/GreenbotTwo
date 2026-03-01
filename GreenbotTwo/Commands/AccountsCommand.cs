@@ -70,6 +70,8 @@ public class AccountsCommand(IGreenfieldApiService apiService, IAccountLinkServi
                 await Context.Interaction.ModifyResponse(embeds: null, components: [accountViewComponent], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
                 return;
             }
+            await Context.Interaction.ModifyResponse([ErrorTargetHasNoLinkedAccountsEmbed]);
+            return;
         }
 
         commandLogger.LogCommandDebug(Context, $"Found {users.Count} users for {user.Username} ({user.Id}).");
