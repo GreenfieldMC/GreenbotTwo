@@ -383,7 +383,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
                     img.ImageType.Equals("Other", StringComparison.OrdinalIgnoreCase))
                 .Select(img => img.Link).ToList();
             
-            applicationComponents.Add(new TextDisplayProperties($"**__Discord__**: {discordSnowflake.Mention()}\t\t**__Minecraft IGN__**: `{user.Username}`\t\t**__Age__**: `{appToForward.Age}`{(appToForward.Nationality != null ? $"\t\t**__Nationality__**: `{appToForward.Nationality}`" : "")}\n\n**__Minecraft UUID__**: `{user.MinecraftUuid}`"));
+            applicationComponents.Add(new TextDisplayProperties($"**__Discord__**: {discordSnowflake.Mention()}\t\t**__Minecraft IGN__**: `{user.Username}`\t\t**__Age__**: `{appToForward.Age}`{(!string.IsNullOrWhiteSpace(appToForward.Nationality) ? $"\t\t**__Nationality__**: `{appToForward.Nationality}`" : "")}\n\n**__Minecraft UUID__**: `{user.MinecraftUuid}`"));
             applicationComponents.Add(new ComponentSeparatorProperties());
             applicationComponents.Add(new TextDisplayProperties("### Why do you want to be a part of Greenfield?"));
             applicationComponents.Add(new TextDisplayProperties(appToForward.WhyJoinGreenfield));
