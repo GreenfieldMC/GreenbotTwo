@@ -367,7 +367,7 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
         var applicationComponents = new List<IComponentContainerComponentProperties> { new TextDisplayProperties($"# Builder Application Summary #{appToForward.ApplicationId}") };
         
         if (onlyShowBasicInfo) 
-            applicationComponents.Add(new TextDisplayProperties($"**__Discord__**: {discordSnowflake.Mention()}\t\t**__Minecraft IGN__**: `{user.Username}`\t\t**__Age__**: `{appToForward.Age}`{(appToForward.Nationality != null ? $"\t\t**__Nationality__**: `{appToForward.Nationality}`" : "")}"));
+            applicationComponents.Add(new TextDisplayProperties($"**__Discord__**: {discordSnowflake.Mention()}\t\t**__Minecraft IGN__**: `{user.Username}`\t\t**__Age__**: `{appToForward.Age}`{(!string.IsNullOrWhiteSpace(appToForward.Nationality) ? $"\t\t**__Nationality__**: `{appToForward.Nationality}`" : "")}"));
         else
         {
             var imagesToUse = overrideImages ?? appToForward.Images;
