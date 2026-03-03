@@ -16,7 +16,8 @@ public interface IAccountLinkService
 
     Task<ComponentContainerProperties> GenerateFinishLinkingComponent(bool disableButton = false);
     
-    Task<ComponentContainerProperties> GenerateAccountViewComponent(User user, string channelUrl);
+    Task<ComponentContainerProperties> GenerateAccountViewComponent(User user, string channelUrl,
+        ulong userViewingAccountComponent);
 
     Task<ComponentContainerProperties> GenerateUserSelectionComponent(AccountLinkService.UserSelectionFor mode,
         List<User> users);

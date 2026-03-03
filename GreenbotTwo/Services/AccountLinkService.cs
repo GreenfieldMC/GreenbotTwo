@@ -50,7 +50,7 @@ public class AccountLinkService(IGreenfieldApiService apiService) : IAccountLink
         return Task.FromResult(container);
     }
 
-    public async Task<ComponentContainerProperties> GenerateAccountViewComponent(User user, string channelUrl)
+    public async Task<ComponentContainerProperties> GenerateAccountViewComponent(User user, string channelUrl, ulong userViewingAccountComponent)
     {
         var foundProfilesResult = await apiService.GetDiscordAccountsForUser(user.UserId);
         if (!foundProfilesResult.TryGetDataNonNull(out var foundProfiles))
@@ -76,6 +76,10 @@ public class AccountLinkService(IGreenfieldApiService apiService) : IAccountLink
                     new TextDisplayProperties(dConn.DiscordSnowflake.Mention())
                 ]);
             }));
+
+        if (foundProfiles.All(dConn => dConn.DiscordSnowflake != userViewingAccountComponent))
+            componentList.Add(new TextDisplayProperties("*Note: Your current Discord profile is NOT linked to this user. Press the `Link New Discord Account` button below to link your current Discord account to this user.*"));
+        
         
         componentList.Add(new ComponentSeparatorProperties());
         

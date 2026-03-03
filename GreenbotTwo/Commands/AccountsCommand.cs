@@ -66,7 +66,7 @@ public class AccountsCommand(IGreenfieldApiService apiService, IAccountLinkServi
             {
                 commandLogger.LogCommandDebug(Context, $"Using cached verified user for {user.Username} ({user.Id}).");
                 var channelUrl = $"discord://discord.com/channels/{Context.Guild?.Id}/{Context.Channel.Id}";
-                var accountViewComponent = await accountLinkService.GenerateAccountViewComponent(cached, channelUrl);
+                var accountViewComponent = await accountLinkService.GenerateAccountViewComponent(cached, channelUrl, Context.User.Id);
                 await Context.Interaction.ModifyResponse(embeds: null, components: [accountViewComponent], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
                 return;
             }
@@ -106,7 +106,7 @@ public class AccountsCommand(IGreenfieldApiService apiService, IAccountLinkServi
 
         commandLogger.LogCommandDebug(Context, $"Found Greenfield user for Minecraft UUID {mojangUser.Uuid}: {gfUser.Username} ({gfUser.UserId})");
         var channelUrl = $"discord://discord.com/channels/{Context.Guild?.Id}/{Context.Channel.Id}";
-        var accountViewComponent = await accountLinkService.GenerateAccountViewComponent(gfUser, channelUrl);
+        var accountViewComponent = await accountLinkService.GenerateAccountViewComponent(gfUser, channelUrl, Context.User.Id);
         await Context.Interaction.ModifyResponse(embeds: null, components: [accountViewComponent], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
     }
     
