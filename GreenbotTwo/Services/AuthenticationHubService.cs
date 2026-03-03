@@ -1,4 +1,5 @@
 using System.Text.Json;
+using GreenbotTwo.Models.AuthHub;
 using GreenbotTwo.Services.Interfaces;
 using Microsoft.Extensions.Logging;
 
@@ -61,6 +62,26 @@ public class AuthenticationHubService(ILogger<IAuthenticationHubService> logger,
         {
             logger.LogError(ex, "An error occurred while removing auth session for UUID {MinecraftUuid}", minecraftUuid);
             return Result.Failure($"An error occurred while removing auth session: {ex.Message}");
+        }
+    }
+
+    public async Task<Result<AuthHubInfo>> GetAuthHubInfo()
+    {
+        try
+        {
+            var response = await httpClient.GetAsync("info");
+            if (!response.IsSuccessStatusCode)
+                return Result<AuthHubInfo>.Failure("Failed to get auth hub info.", response.StatusCode);
+
+            var content = await response.Content.ReadAsStringAsync();
+            var result = JsonSerializer.Deserialize<AuthHubInfo>(content, JsonOptions);
+            return Result<AuthHubInfo>.Success(result ?? throw new Exception("Deserialized auth hub info was null."));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "An error occurred while getting auth hub info");
+            return Result<AuthHubInfo>.Failure($"An error occurred while getting auth hub info: {ex.Message}");
+            
         }
     }
 }

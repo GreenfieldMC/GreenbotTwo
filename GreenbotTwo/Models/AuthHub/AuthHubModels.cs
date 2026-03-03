@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace GreenbotTwo.Models.AuthHub;
 
 public class AuthHubAppConnection
@@ -16,16 +18,11 @@ public class AuthHubAppConnection
     public required string Status { get; set; }
 }
 
-public class AuthHubAppConnections
+public class AuthHubInfo
 {
-    /// <summary>
-    /// The list of application connections
-    /// </summary>
-    public required List<AuthHubAppConnection> Apps { get; set; }
-}
-
-public class AuthHubResponse
-{
-    public required string Message { get; set; }
-    public required int Status { get; set; }
+    [JsonPropertyName("auth_server_ip")]
+    public required string AuthServerIp { get; set; }
+    
+    [JsonPropertyName("auth_server_version")]
+    public required string AuthServerVersion { get; set; }
 }

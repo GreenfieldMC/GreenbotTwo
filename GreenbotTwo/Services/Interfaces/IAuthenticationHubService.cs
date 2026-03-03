@@ -26,5 +26,11 @@ public interface IAuthenticationHubService
     /// <param name="minecraftUuid"></param>
     /// <returns></returns>
     Task<Result> RemoveAuthSession(Guid minecraftUuid);
+    
+    /// <summary>
+    /// get the auth server connection information
+    /// </summary>
+    /// <returns></returns>
+    Task<Result<AuthHubInfo>> GetAuthHubInfo();
 
 }
