@@ -119,7 +119,7 @@ public class AccountLinkInteractions
                 return;
             }
             
-            var selectionComponent = await accountLinkService.GenerateAccountViewComponent(user, $"discord://discord.com/channels/{Context.Guild!.Id}/{Context.Channel.Id}");
+            var selectionComponent = await accountLinkService.GenerateAccountViewComponent(user, $"discord://discord.com/channels/{Context.Guild!.Id}/{Context.Channel.Id}", Context.User.Id);
             await Context.Interaction.ModifyResponse(components: [selectionComponent], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
         }
     }
@@ -218,9 +218,9 @@ public class AccountLinkInteractions
                 if (!discordConnectComponentResult.TryGetDataNonNull(out var discordConnectComponent))
                 {
                     logger.LogError("Failed to generate Discord link component for user {UserId} after account linking. Error: {ErrorMessage}", actualUser.UserId, discordConnectComponentResult.ErrorMessage);
-                    component = await accountLinkService.GenerateAccountViewComponent(actualUser, currentChannelLink);
+                    component = await accountLinkService.GenerateAccountViewComponent(actualUser, currentChannelLink, Context.User.Id);
                 } else component = discordConnectComponent;
-            } else component = await accountLinkService.GenerateAccountViewComponent(actualUser, currentChannelLink);
+            } else component = await accountLinkService.GenerateAccountViewComponent(actualUser, currentChannelLink, Context.User.Id);
             
             _ = Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties()
                 .WithComponents([
