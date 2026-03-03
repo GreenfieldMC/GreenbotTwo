@@ -48,7 +48,7 @@ public class AccountLinkInteractions
     
     #endregion
     
-    public class AccountLinkButtonInteractions(IAccountLinkService accountLinkService) : ComponentInteractionModule<ButtonInteractionContext>
+    public class AccountLinkButtonInteractions(IAccountLinkService accountLinkService, IAuthenticationHubService authHubService) : ComponentInteractionModule<ButtonInteractionContext>
     {
         [ComponentInteraction(AccountLinkNewAccountButton)]
         public async Task<InteractionCallbackProperties> LinkNewAccount()
@@ -79,11 +79,19 @@ public class AccountLinkInteractions
             }
             
             var accountLinkForm = accountLinkService.GetOrStartAccountLinkForm(Context.User.Id, AccountLinkService.UserSelectionFor.AccountView);
+            var authServerInfoResult = await authHubService.GetAuthHubInfo();
+
+            if (!authServerInfoResult.TryGetDataNonNull(out var authServerInfo))
+            {
+                return InteractionCallback.Message(new InteractionMessageProperties()
+                    .WithEmbeds([GenericEmbeds.InternalError("Account Link Service", "The authentication service is currently unavailable. Please try again momentarily. If this issue persists, please ask NJDaeger for assistance.")])
+                    .WithFlags(MessageFlags.Ephemeral));
+            }
             
             var modal = new ModalProperties("authhub_code_modal", "Minecraft Account Link")
                 .WithComponents([
                     new TextDisplayProperties(
-                        "Please join the server `play.greenfieldmc.net` to retrieve your auth code. If you are already whitelisted, join the server and run the command `/authhub`"),
+                        $"Please join the server `{authServerInfo.AuthServerIp}` with a Java Edition account on Minecraft Version `{authServerInfo.AuthServerVersion}` to retrieve your auth code. If you are already whitelisted, join the server and run the command `/authhub`"),
                     new TextDisplayProperties($"Your Minecraft username: `{accountLinkForm.MinecraftUsername}`"),
                     new TextDisplayProperties($"Your Minecraft UUID: `{accountLinkForm.MinecraftUuid}`"),
                     new LabelProperties("Authentication Code",
