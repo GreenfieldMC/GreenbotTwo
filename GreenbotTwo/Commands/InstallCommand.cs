@@ -32,7 +32,7 @@ public class InstallCommand(IOptions<InstallCommandSettings> settings, ILogger<I
         
         if (userWhoNeedsInstructions.Id == Context.User.Id)
         {
-            commandLogger.LogCommandDebug(Context, "User requested their own installation instructions.");
+            commandLogger.LogInteractionDebug(Context, "User requested their own installation instructions.");
             await Context.Interaction.ModifyResponseAsync(options => options.WithContent(message.Content).WithAllowedMentions(message.AllowedMentions));
             return;
         }

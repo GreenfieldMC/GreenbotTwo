@@ -52,7 +52,7 @@ public class AccountsCommand(IGreenfieldApiService apiService, IAccountLinkServi
 
         if (!userResponse.TryGetData(out var connectionWithUsers) && userResponse.StatusCode != HttpStatusCode.NotFound)
         {
-            commandLogger.LogCommandDebug(Context, $"Failed to fetch users for user {user.Username} ({user.Id}). Status code: {userResponse.StatusCode}, Error: {userResponse.ErrorMessage}");
+            commandLogger.LogInteractionDebug(Context, $"Failed to fetch users for user {user.Username} ({user.Id}). Status code: {userResponse.StatusCode}, Error: {userResponse.ErrorMessage}");
             await Context.Interaction.ModifyResponse([FailedToFetchUsersEmbed]);
             return;
         }
@@ -60,11 +60,11 @@ public class AccountsCommand(IGreenfieldApiService apiService, IAccountLinkServi
         var users = connectionWithUsers?.Users ?? [];
         if (users.Count == 0)
         {
-            commandLogger.LogCommandDebug(Context, $"No users found for {user.Username} ({user.Id}).");
+            commandLogger.LogInteractionDebug(Context, $"No users found for {user.Username} ({user.Id}).");
             var cached = accountLinkService.GetCachedVerifiedUser(user.Id);
             if (cached is not null)
             {
-                commandLogger.LogCommandDebug(Context, $"Using cached verified user for {user.Username} ({user.Id}).");
+                commandLogger.LogInteractionDebug(Context, $"Using cached verified user for {user.Username} ({user.Id}).");
                 var channelUrl = $"discord://discord.com/channels/{Context.Guild?.Id}/{Context.Channel.Id}";
                 var accountViewComponent = await accountLinkService.GenerateAccountViewComponent(cached, channelUrl, Context.User.Id);
                 await Context.Interaction.ModifyResponse(embeds: null, components: [accountViewComponent], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
@@ -74,7 +74,7 @@ public class AccountsCommand(IGreenfieldApiService apiService, IAccountLinkServi
             return;
         }
 
-        commandLogger.LogCommandDebug(Context, $"Found {users.Count} users for {user.Username} ({user.Id}).");
+        commandLogger.LogInteractionDebug(Context, $"Found {users.Count} users for {user.Username} ({user.Id}).");
         var selectionComponent = await accountLinkService.GenerateUserSelectionComponent(AccountLinkService.UserSelectionFor.AccountView, users);
         
         await Context.Interaction.ModifyResponse(embeds: null, components: [selectionComponent], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
@@ -91,7 +91,7 @@ public class AccountsCommand(IGreenfieldApiService apiService, IAccountLinkServi
         var mojangUserResult = await mojangService.GetMinecraftProfileByUsername(minecraftUsername);
         if (!mojangUserResult.TryGetDataNonNull(out var mojangUser))
         {
-            commandLogger.LogCommandDebug(Context, $"Failed to fetch Minecraft user for username {minecraftUsername}. Status code: {mojangUserResult.StatusCode}, Error: {mojangUserResult.ErrorMessage}");
+            commandLogger.LogInteractionDebug(Context, $"Failed to fetch Minecraft user for username {minecraftUsername}. Status code: {mojangUserResult.StatusCode}, Error: {mojangUserResult.ErrorMessage}");
             await Context.Interaction.ModifyResponse(embeds: [ErrorUnknownMinecraftUser]);
             return;
         }
@@ -99,12 +99,12 @@ public class AccountsCommand(IGreenfieldApiService apiService, IAccountLinkServi
         var gfUserResult = await apiService.GetUserByMinecraftUuid(mojangUser.Uuid);
         if (!gfUserResult.TryGetDataNonNull(out var gfUser))
         {
-            commandLogger.LogCommandDebug(Context, $"Failed to fetch Greenfield user for Minecraft UUID {mojangUser.Uuid}. Status code: {gfUserResult.StatusCode}, Error: {gfUserResult.ErrorMessage}");
+            commandLogger.LogInteractionDebug(Context, $"Failed to fetch Greenfield user for Minecraft UUID {mojangUser.Uuid}. Status code: {gfUserResult.StatusCode}, Error: {gfUserResult.ErrorMessage}");
             await Context.Interaction.ModifyResponse(embeds: [ErrorUnlinkedMinecraftUser]);
             return;
         }
 
-        commandLogger.LogCommandDebug(Context, $"Found Greenfield user for Minecraft UUID {mojangUser.Uuid}: {gfUser.Username} ({gfUser.UserId})");
+        commandLogger.LogInteractionDebug(Context, $"Found Greenfield user for Minecraft UUID {mojangUser.Uuid}: {gfUser.Username} ({gfUser.UserId})");
         var channelUrl = $"discord://discord.com/channels/{Context.Guild?.Id}/{Context.Channel.Id}";
         var accountViewComponent = await accountLinkService.GenerateAccountViewComponent(gfUser, channelUrl, Context.User.Id);
         await Context.Interaction.ModifyResponse(embeds: null, components: [accountViewComponent], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);

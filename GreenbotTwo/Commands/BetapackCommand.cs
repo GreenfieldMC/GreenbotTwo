@@ -27,7 +27,7 @@ public class BetapackCommand(IOptions<BetapackCommandSettings> settings, IGreenf
         var downloadResult = await greenfieldApiService.GetResourcePackDownloadLink(selectedBranch);
         if (!downloadResult.TryGetDataNonNull(out var download))
         {
-            logger.LogCommandError(Context, $"Failed to get download link for branch '{selectedBranch}'. Status code: {downloadResult.StatusCode}, Error: {downloadResult.ErrorMessage}");
+            logger.LogInteractionError(Context, $"Failed to get download link for branch '{selectedBranch}'. Status code: {downloadResult.StatusCode}, Error: {downloadResult.ErrorMessage}");
             await Context.Interaction.ModifyResponseAsync(options =>
                 options.WithEmbeds([GenericEmbeds.InternalError("Download Failed", $"Failed to generate a download link for the `{selectedBranch}` branch.")]));
             return;

@@ -26,7 +26,7 @@ public class CodesCommand(IGreenfieldApiService greenfieldApiService, ILogger<IA
         
         if (!buildCodeResult.TryGetDataNonNull(out var buildCodesEnum))
         {
-            commandLogger.LogCommandDebug(Context, $"Failed to fetch build codes with error: {buildCodeResult.ErrorMessage}, Status Code: {buildCodeResult.StatusCode}");
+            commandLogger.LogInteractionDebug(Context, $"Failed to fetch build codes with error: {buildCodeResult.ErrorMessage}, Status Code: {buildCodeResult.StatusCode}");
             await Context.Interaction.ModifyResponse([ErrorCouldNotFetchBuildCodes]);
             return;
         }
@@ -35,7 +35,7 @@ public class CodesCommand(IGreenfieldApiService greenfieldApiService, ILogger<IA
 
         if (buildCodes.Count == 0)
         {
-            commandLogger.LogCommandDebug(Context, "No build codes are defined for the server.");
+            commandLogger.LogInteractionDebug(Context, "No build codes are defined for the server.");
             await Context.Interaction.ModifyResponse([ErrorNoBuildCodesDefined]);
             return;
         }
@@ -56,7 +56,7 @@ public class CodesCommand(IGreenfieldApiService greenfieldApiService, ILogger<IA
         
         if (userWhoNeedsCodes.Id == Context.User.Id)
         {
-            commandLogger.LogCommandDebug(Context, "User requested their own build codes.");
+            commandLogger.LogInteractionDebug(Context, "User requested their own build codes.");
             await Context.Interaction.ModifyResponse([
                 new EmbedProperties()
                     .WithTitle("Current Server Build Codes")

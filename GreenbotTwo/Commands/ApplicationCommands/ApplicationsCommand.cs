@@ -55,7 +55,7 @@ public class ApplicationsCommand(IGreenfieldApiService gfApiService, IMojangServ
         var gfUserResult = await gfApiService.GetUsersConnectedToDiscordAccount(user.Id);
         if (!gfUserResult.TryGetDataNonNull(out var discordConnection) || discordConnection.Users.Count == 0)
         {
-            commandLogger.LogCommandDebug(Context, $"Failed to fetch users for user {user.Username} ({user.Id}). Status code: {gfUserResult.StatusCode}, Error: {gfUserResult.ErrorMessage}");
+            commandLogger.LogInteractionDebug(Context, $"Failed to fetch users for user {user.Username} ({user.Id}). Status code: {gfUserResult.StatusCode}, Error: {gfUserResult.ErrorMessage}");
             await Context.Interaction.ModifyResponse(embeds: [ErrorUnlinkedMinecraftUser]);
             return;
         }
@@ -67,18 +67,18 @@ public class ApplicationsCommand(IGreenfieldApiService gfApiService, IMojangServ
             var appListResult = await gfApiService.GetApplicationsByUser(linkedUser.UserId);
             if (!appListResult.TryGetDataNonNull(out var applicationsEnum))
             {
-                commandLogger.LogCommandDebug(Context, $"Failed to fetch applications for user {linkedUser.Username} ({linkedUser.UserId}). Status code: {appListResult.StatusCode}, Error: {appListResult.ErrorMessage}");
+                commandLogger.LogInteractionDebug(Context, $"Failed to fetch applications for user {linkedUser.Username} ({linkedUser.UserId}). Status code: {appListResult.StatusCode}, Error: {appListResult.ErrorMessage}");
                 continue;
             }
             
             var appList = applicationsEnum.ToList();
             if (appList.Count <= 0)
             {
-                commandLogger.LogCommandDebug(Context, $"No applications found for user {linkedUser.Username} ({linkedUser.UserId}).");
+                commandLogger.LogInteractionDebug(Context, $"No applications found for user {linkedUser.Username} ({linkedUser.UserId}).");
                 continue;
             }
             
-            commandLogger.LogCommandDebug(Context, $"Found {appList.Count} applications for user {linkedUser.Username} ({linkedUser.UserId}).");
+            commandLogger.LogInteractionDebug(Context, $"Found {appList.Count} applications for user {linkedUser.Username} ({linkedUser.UserId}).");
             var embed = GenerateApplicationListEmbed(linkedUser.Username, appList);
             embeds.Add(embed);
         }
@@ -112,7 +112,7 @@ public class ApplicationsCommand(IGreenfieldApiService gfApiService, IMojangServ
         var mojangUserResult = await mojangService.GetMinecraftProfileByUsername(minecraftUsername);
         if (!mojangUserResult.TryGetDataNonNull(out var mojangUser))
         {
-            commandLogger.LogCommandDebug(Context, $"Failed to fetch Minecraft profile for username {minecraftUsername}. Status code: {mojangUserResult.StatusCode}, Error: {mojangUserResult.ErrorMessage}");
+            commandLogger.LogInteractionDebug(Context, $"Failed to fetch Minecraft profile for username {minecraftUsername}. Status code: {mojangUserResult.StatusCode}, Error: {mojangUserResult.ErrorMessage}");
             await Context.Interaction.ModifyResponse(embeds: [ErrorUnknownMinecraftUser]);
             return;
         }
@@ -120,7 +120,7 @@ public class ApplicationsCommand(IGreenfieldApiService gfApiService, IMojangServ
         var gfUserResult = await gfApiService.GetUserByMinecraftUuid(mojangUser.Uuid);
         if (!gfUserResult.TryGetDataNonNull(out var gfUser))
         {
-            commandLogger.LogCommandDebug(Context, $"Failed to fetch Greenfield user for Minecraft UUID {mojangUser.Uuid} (username: {minecraftUsername}). Status code: {gfUserResult.StatusCode}, Error: {gfUserResult.ErrorMessage}");
+            commandLogger.LogInteractionDebug(Context, $"Failed to fetch Greenfield user for Minecraft UUID {mojangUser.Uuid} (username: {minecraftUsername}). Status code: {gfUserResult.StatusCode}, Error: {gfUserResult.ErrorMessage}");
             await Context.Interaction.ModifyResponse(embeds: [ErrorUnlinkedMinecraftUser]);
             return;
         }
@@ -128,7 +128,7 @@ public class ApplicationsCommand(IGreenfieldApiService gfApiService, IMojangServ
         var appListResult = await gfApiService.GetApplicationsByUser(gfUser.UserId);
         if (!appListResult.TryGetDataNonNull(out var applicationsEnum))
         {
-            commandLogger.LogCommandDebug(Context, $"Failed to fetch applications for Minecraft user {minecraftUsername} (UUID: {mojangUser.Uuid}, UserId: {gfUser.UserId}). Status code: {appListResult.StatusCode}, Error: {appListResult.ErrorMessage}");
+            commandLogger.LogInteractionDebug(Context, $"Failed to fetch applications for Minecraft user {minecraftUsername} (UUID: {mojangUser.Uuid}, UserId: {gfUser.UserId}). Status code: {appListResult.StatusCode}, Error: {appListResult.ErrorMessage}");
             await Context.Interaction.ModifyResponse(embeds: [ErrorCouldNotFetchApplications]);
             return;
         }
@@ -136,12 +136,12 @@ public class ApplicationsCommand(IGreenfieldApiService gfApiService, IMojangServ
         var appList = applicationsEnum.ToList();
         if (appList.Count == 0)
         {
-            commandLogger.LogCommandDebug(Context, $"No applications found for Minecraft user {minecraftUsername} (UUID: {mojangUser.Uuid}, UserId: {gfUser.UserId}).");
+            commandLogger.LogInteractionDebug(Context, $"No applications found for Minecraft user {minecraftUsername} (UUID: {mojangUser.Uuid}, UserId: {gfUser.UserId}).");
             await Context.Interaction.ModifyResponse(embeds: [ErrorNoApplications]);
             return;
         }
         
-        commandLogger.LogCommandDebug(Context, $"Applications found for Minecraft user {minecraftUsername} (UUID: {mojangUser.Uuid}, UserId: {gfUser.UserId}). Count: {appList.Count}");
+        commandLogger.LogInteractionDebug(Context, $"Applications found for Minecraft user {minecraftUsername} (UUID: {mojangUser.Uuid}, UserId: {gfUser.UserId}). Count: {appList.Count}");
         
         var embed = GenerateApplicationListEmbed(minecraftUsername, appList);
         await Context.Interaction.ModifyResponse(embeds: [embed]);
@@ -166,7 +166,7 @@ public class ApplicationsCommand(IGreenfieldApiService gfApiService, IMojangServ
         var userDiscordAccountResponse = await gfApiService.GetDiscordAccountsForUser(application.UserId);
         if (!userDiscordAccountResponse.TryGetData(out var discordAccounts) || discordAccounts == null || discordAccounts.Count == 0)
         {
-            commandLogger.LogCommandDebug(Context, $"Failed to fetch Discord accounts for user ID {application.UserId} associated with application ID {application.ApplicationId}. Status code: {userDiscordAccountResponse.StatusCode}, Error: {userDiscordAccountResponse.ErrorMessage}");
+            commandLogger.LogInteractionDebug(Context, $"Failed to fetch Discord accounts for user ID {application.UserId} associated with application ID {application.ApplicationId}. Status code: {userDiscordAccountResponse.StatusCode}, Error: {userDiscordAccountResponse.ErrorMessage}");
             await Context.Interaction.ModifyResponse(embeds: [ErrorUnknownApplicationUser]);
             return;
         }
@@ -181,7 +181,7 @@ public class ApplicationsCommand(IGreenfieldApiService gfApiService, IMojangServ
                 .WithDescription(latestStatus.StatusMessage);
         }
         
-        commandLogger.LogCommandDebug(Context, $"Successfully fetched Discord accounts for user ID {application.UserId} associated with application ID {application.ApplicationId}.");        
+        commandLogger.LogInteractionDebug(Context, $"Successfully fetched Discord accounts for user ID {application.UserId} associated with application ID {application.ApplicationId}.");        
         
         await Context.Interaction.ModifyResponse(components: [builtComponent], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2, embeds: null);
         if (statusEmbed != null)
@@ -208,7 +208,7 @@ public class ApplicationsCommand(IGreenfieldApiService gfApiService, IMojangServ
         var userDiscordAccountResponse = await gfApiService.GetDiscordAccountsForUser(application.UserId);
         if (!userDiscordAccountResponse.TryGetData(out var discordAccounts) || discordAccounts == null || discordAccounts.Count == 0)
         {
-            commandLogger.LogCommandDebug(Context, $"Failed to fetch Discord accounts for user ID {application.UserId} associated with application ID {application.ApplicationId}. Status code: {userDiscordAccountResponse.StatusCode}, Error: {userDiscordAccountResponse.ErrorMessage}");
+            commandLogger.LogInteractionDebug(Context, $"Failed to fetch Discord accounts for user ID {application.UserId} associated with application ID {application.ApplicationId}. Status code: {userDiscordAccountResponse.StatusCode}, Error: {userDiscordAccountResponse.ErrorMessage}");
             await Context.Interaction.ModifyResponse(embeds: [ErrorUnknownApplicationUser]);
             return;
         }
@@ -218,7 +218,7 @@ public class ApplicationsCommand(IGreenfieldApiService gfApiService, IMojangServ
 
         if (!forwardResult.IsSuccessful)
         {
-            commandLogger.LogCommandDebug(Context, $"Failed to forward application ID {application.ApplicationId}. Status code: {forwardResult.StatusCode}, Error: {forwardResult.ErrorMessage}");
+            commandLogger.LogInteractionDebug(Context, $"Failed to forward application ID {application.ApplicationId}. Status code: {forwardResult.StatusCode}, Error: {forwardResult.ErrorMessage}");
             await Context.Interaction.ModifyResponse(embeds: [ApplicationForwardFailedEmbed(application.ApplicationId, forwardResult.ErrorMessage)]);
             return;
         }
