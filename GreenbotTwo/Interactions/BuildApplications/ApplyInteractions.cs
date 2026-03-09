@@ -25,7 +25,7 @@ public class ApplyInteractions
         "Hi! Welcome to Greenfield, and thank you for considering becoming a build member! Please complete all sections of the application by clicking the buttons below and filling out each required form.\n\nIf you have any questions or concerns about the application process, please ask a Staff member for assistance. Your progress before final submission (except for image uploads) will be saved.\n\nGood Luck!")
         .WithFooter(new EmbedFooterProperties().WithText("You may stop the application at any time before submission by running /apply cancel"));
     private static readonly Func<long,EmbedProperties> ApplicationSubmitEmbed = appId => GenericEmbeds.Success("Greenfield Application Service",
-        $"Thank you for submitting your application to join the Greenfield Build Team! We appreciate your interest and the time you've taken to apply. Your application is processing; we will be in touch with you regarding the status of your application as soon as possible. To view the status of your application, you may use the command `/application view {appId}`. Good luck!");
+        $"Thank you for submitting your application to join the Greenfield Build Team! We appreciate your interest and the time you've taken to apply. Your application is processing; we will be in touch with you regarding the status of your application as soon as possible. To view the status of your application, you may use the command `/applications view {appId}`. Good luck!");
     private static readonly EmbedProperties ApplicationPreparingEmbed = GenericEmbeds.Info("Greenfield Application Service",
         "Preparing your application...");
     
