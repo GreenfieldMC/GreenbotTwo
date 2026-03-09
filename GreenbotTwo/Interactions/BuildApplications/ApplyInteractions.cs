@@ -5,6 +5,7 @@ using GreenbotTwo.Extensions;
 using GreenbotTwo.Models.Forms;
 using GreenbotTwo.Services;
 using GreenbotTwo.Services.Interfaces;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NetCord;
 using NetCord.Rest;
@@ -80,7 +81,7 @@ public class ApplyInteractions
     /// </summary>
     /// <param name="applicationService"></param>
     /// <param name="gfApiService"></param>
-    public class ApplyUserSelectionInteractions(IApplicationService applicationService, IGreenfieldApiService gfApiService) : ComponentInteractionModule<StringMenuInteractionContext>
+    public class ApplyUserSelectionInteractions(IApplicationService applicationService, IGreenfieldApiService gfApiService, ILogger<IComponentInteractionContext> logger) : ComponentInteractionModule<StringMenuInteractionContext>
     {
         
         [ComponentInteraction(ApplicationUserSelectionButton)]
@@ -128,13 +129,16 @@ public class ApplyInteractions
                 var discordConnectionButtonResult = await applicationService.GenerateDiscordLinkComponent(user.UserId, channelUrl);
                 if (!discordConnectionButtonResult.TryGetDataNonNull(out var discordConnectComponent))
                 {
+                    logger.LogInteractionError(Context, $"User {Context.User.Username} selected user {user.Username} ({user.UserId}) for application, but failed to generate Discord connection URL. Error: {discordConnectionButtonResult.ErrorMessage}, Status Code: {discordConnectionButtonResult.StatusCode}");
                     await Context.Interaction.SendFollowupResponse([InternalErrorFailedToGetDiscordConnectionUrl], [], MessageFlags.Ephemeral);
                     return;
                 }
+                logger.LogInteractionDebug(Context, $"User {Context.User.Username} selected user {user.Username} ({user.UserId}) for application, but no linked Discord accounts were found. Sending link account button.");
                 await Context.Interaction.SendFollowupResponse([], [discordConnectComponent], MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
                 return;
             }
             
+            logger.LogInteractionDebug(Context, $"User {Context.User.Username} selected user {user.Username} ({user.UserId}) for application. Starting application.");
             var application = applicationService.StartApplication(Context.User.Id, user);
             await Context.Interaction.ModifyResponse([ApplicationStartEmbed], [new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())]);
         }
@@ -144,7 +148,7 @@ public class ApplyInteractions
     /// These are all the buttons that make up the application process.
     /// </summary>
     /// <param name="applicationService"></param>
-    public class ApplyMessageButtonInteractions(IOptions<BuilderApplicationSettings> buildAppSettings, IApplicationService applicationService, IGreenfieldApiService apiService, IAccountLinkService accountLinkService) : ComponentInteractionModule<ButtonInteractionContext>
+    public class ApplyMessageButtonInteractions(IOptions<BuilderApplicationSettings> buildAppSettings, IApplicationService applicationService, IGreenfieldApiService apiService, IAccountLinkService accountLinkService, ILogger<IComponentInteractionContext> logger) : ComponentInteractionModule<ButtonInteractionContext>
     {
 
         [ComponentInteraction("start_application")]
@@ -171,11 +175,15 @@ public class ApplyInteractions
                 return;
             }
             
+            logger.LogInteractionDebug(Context, $"User {Context.User.Username} ({Context.User.Id}) is starting an application. Found {connectionWithUsers?.Users.Count ?? 0} linked users.");
             var users = connectionWithUsers?.Users ?? [];
-            if (users.Count == 0)          {
+            if (users.Count == 0) {
                 var cached = accountLinkService.GetCachedVerifiedUser(Context.User.Id);
                 if (cached is not null)
-                    users.Add(cached);
+                {
+                    logger.LogInteractionDebug(Context, $"User {Context.User.Username} has no linked accounts but is a cached verified user. Using cached user {cached.Username} ({cached.UserId}) for application start.");
+                    users.Add(cached);   
+                }
             }
             var selectionComponent = await accountLinkService.GenerateUserSelectionComponent(AccountLinkService.UserSelectionFor.Application, users);
             await Context.Interaction.SendResponse(components: [selectionComponent], flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2);
@@ -184,6 +192,7 @@ public class ApplyInteractions
         [ComponentInteraction(ApplicationLinkNewAccountButton)]
         public async Task<InteractionCallbackProperties> LinkNewAccount()
         {
+            logger.LogInteractionDebug(Context, $"User {Context.User.Username} ({Context.User.Id}) has no linked accounts and is starting the account linking process from the application flow.");
             accountLinkService.ClearCachedVerifiedUser(Context.User.Id);
             accountLinkService.ClearInProgressAccountLink(Context.User.Id);
             accountLinkService.GetOrStartAccountLinkForm(Context.User.Id, AccountLinkService.UserSelectionFor.Application);
@@ -203,6 +212,8 @@ public class ApplyInteractions
         {
             var isInProgress = applicationService.HasApplicationInProgress(Context.User.Id);
             if (!isInProgress) return InteractionCallback.ModifyMessage(options => options.WithComponents([]).WithEmbeds([UserErrorNoApplicationInProgress]));
+            
+            logger.LogInteractionDebug(Context, $"User {Context.User.Username} ({Context.User.Id}) is filling out the Terms and Conditions for the application.");
             
             var modal = new ModalProperties("apply_terms_modal", "Section 1 - Terms and Conditions")
                 .WithComponents([
@@ -225,6 +236,8 @@ public class ApplyInteractions
 
             var application = applicationService.GetApplication(Context.User.Id) ?? throw new InvalidOperationException("Application in progress but could not be retrieved.");
             
+            logger.LogInteractionDebug(Context, $"User {Context.User.Username} ({Context.User.Id}) is filling out the User Information for the application.");
+            
             var modal = new ModalProperties("apply_user_info_modal", "Section 2 - Personal Information")
                 .WithComponents([
                     new LabelProperties("Age", new TextInputProperties("apply_modal_age", TextInputStyle.Short)
@@ -245,6 +258,8 @@ public class ApplyInteractions
             if (!isInProgress) return InteractionCallback.ModifyMessage(options => options.WithComponents([]).WithEmbeds([UserErrorNoApplicationInProgress]));
 
             var application = applicationService.GetApplication(Context.User.Id) ?? throw new InvalidOperationException("Application in progress but could not be retrieved.");
+            
+            logger.LogInteractionDebug(Context, $"User {Context.User.Username} ({Context.User.Id}) is filling out the Building Experience section for the application.");
             
             var modal = new ModalProperties("apply_building_experience_modal", "Section 3 - Building Experience")
                 .WithComponents([
@@ -272,8 +287,11 @@ public class ApplyInteractions
         {
             var isInProgress = applicationService.HasApplicationInProgress(Context.User.Id);
             if (!isInProgress) return InteractionCallback.ModifyMessage(options => options.WithComponents([]).WithEmbeds([UserErrorNoApplicationInProgress]));
-
+            
             var application = applicationService.GetApplication(Context.User.Id) ?? throw new InvalidOperationException("Application in progress but could not be retrieved.");
+            
+            logger.LogInteractionDebug(Context, $"User {Context.User.Username} ({Context.User.Id}) is filling out the Closing Thoughts section for the application.");
+            
             var modal = new ModalProperties("apply_closing_thoughts_modal", "Section 4 - Closing Remarks")
                 .WithComponents([
                     new LabelProperties("Why do you want join our Build Team?", new TextInputProperties("apply_modal_why_join", TextInputStyle.Paragraph)
@@ -296,7 +314,9 @@ public class ApplyInteractions
         {
             var isInProgress = applicationService.HasApplicationInProgress(Context.User.Id);
             if (!isInProgress) return InteractionCallback.ModifyMessage(options => options.WithComponents([]).WithEmbeds([UserErrorNoApplicationInProgress]));
-
+            
+            logger.LogInteractionDebug(Context, $"User {Context.User.Username} ({Context.User.Id}) is attempting to submit their application.");
+            
             var modal = new ModalProperties("apply_final_submit_modal", "Submission")
                 .WithComponents([
                     new TextDisplayProperties("By submitting your application, you confirm that all information provided is accurate and truthful to the best of your knowledge. You understand that any false information may lead to disqualification from the application process. Once you submit, you will not be able to modify your application responses from this attempt."),
@@ -314,7 +334,7 @@ public class ApplyInteractions
     /// <param name="applicationService"></param>
     /// <param name="mojangService"></param>
     /// <param name="restClient"></param>
-    public class ApplyModalInteractions(IOptions<BuilderApplicationSettings> buildAppSettings, IApplicationService applicationService, IGreenfieldApiService gfApiService) : ComponentInteractionModule<ModalInteractionContext>
+    public class ApplyModalInteractions(IOptions<BuilderApplicationSettings> buildAppSettings, IApplicationService applicationService, IGreenfieldApiService gfApiService, ILogger<IComponentInteractionContext> logger) : ComponentInteractionModule<ModalInteractionContext>
     {
         
         /// <summary>
@@ -341,11 +361,13 @@ public class ApplyInteractions
             var selection = (Context.Components.FromLabel<CheckboxGroup>()?.CheckedValues ?? [])[0];
             if (!selection.Equals("agree", StringComparison.InvariantCultureIgnoreCase)) 
             {
+                logger.LogInteractionDebug(Context, $"User {Context.User.Username} ({Context.User.Id}) disagreed with the Terms and Conditions. Tossing application.");
                 applicationService.ClearInProgressApplication(Context.User.Id);
                 await Context.Interaction.ModifyResponse([UserErrorTermsOfServiceDisagreement], []);
                 return;
             }
 
+            logger.LogInteractionDebug(Context, $"User {Context.User.Username} ({Context.User.Id}) agreed with the Terms and Conditions. Marking section as complete and moving on.");
             application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.TermsOfService] = selection.Equals("agree", StringComparison.InvariantCultureIgnoreCase);
             await Context.Interaction.ModifyResponse(components: [new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())]);
         }
@@ -380,6 +402,7 @@ public class ApplyInteractions
             application.Age = ageNumber;
             application.Nationality = Context.Components.FromLabel<TextInput>("apply_modal_nationality")!.Value;
             application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.PersonalInformation] = validationMessages.Count == 0;
+            logger.LogInteractionDebug(Context, $"User {Context.User.Username} ({Context.User.Id}) submitted the Personal Information section. Validation count: {validationMessages.Count}. Marking section as {(validationMessages.Count == 0 ? "complete and moving on." : "incomplete.")}");
 
             await Context.Interaction.ModifyResponse([ApplicationStartEmbed, ..validationMessages.Take(4)], [new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())]);
         }
@@ -442,6 +465,7 @@ public class ApplyInteractions
                 .ToList();
             application.AdditionalBuildingInformation = Context.Components.FromLabel<TextInput>("apply_modal_build_info")!.Value;
             application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.BuildingExperience] = validationMessages.Count == 0;
+            logger.LogInteractionDebug(Context, $"User {Context.User.Username} ({Context.User.Id}) submitted the Building Experience section. Validation count: {validationMessages.Count}. Marking section as {(validationMessages.Count == 0 ? "complete and moving on." : "incomplete.")}");
             
             await Context.Interaction.ModifyResponse([ApplicationStartEmbed, ..validationMessages.Take(4)], [new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())]);
         }
@@ -471,6 +495,7 @@ public class ApplyInteractions
             application.WhyJoinGreenfield = whyJoin;
             application.AdditionalComments = Context.Components.FromLabel<TextInput>("apply_modal_additional_comments")?.Value;
             application.SectionsCompleted[BuilderApplicationForm.ApplicationSections.ClosingRemarks] = true;
+            logger.LogInteractionDebug(Context, $"User {Context.User.Username} ({Context.User.Id}) submitted the Closing Remarks section. Marking section as complete and moving on.");
             
             await Context.Interaction.ModifyResponse([ApplicationStartEmbed], [new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())]);
         }
@@ -498,6 +523,7 @@ public class ApplyInteractions
 
             if (!application.IsComplete()) 
             {
+                logger.LogInteractionError(Context, $"User {Context.User.Username} ({Context.User.Id}) attempted to submit their application, but it was not complete. Sections completed: {string.Join(", ", application.SectionsCompleted.Where(kv => kv.Value).Select(kv => kv.Key))}");
                 applicationService.ClearInProgressApplication(Context.User.Id);
                 await Context.Interaction.ModifyResponse(components: [], embeds: [InternalErrorApplicationSubmitCalledWhenComplete]);
                 return;
@@ -508,6 +534,7 @@ public class ApplyInteractions
             
             if (!submitResult.TryGetDataNonNull(out var appId))
             {
+                logger.LogInteractionError(Context, $"User {Context.User.Username} ({Context.User.Id}) attempted to submit their application, but submission failed. Error: {submitResult.ErrorMessage}, Status Code: {submitResult.StatusCode}");
                 application.Submitted = false;
                 await Context.Interaction.ModifyResponse([ApplicationStartEmbed, InternalErrorSubmissionFailure(submitResult)], [new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())]);
                 return;
@@ -516,11 +543,13 @@ public class ApplyInteractions
             var submittedAppResponse = await gfApiService.GetApplicationById(appId);
             if (!submittedAppResponse.TryGetDataNonNull(out var submittedApplication))
             {
+                logger.LogInteractionError(Context, $"User {Context.User.Username} ({Context.User.Id}) submitted their application, but there was an error retrieving the submitted application for review. Application ID: {appId}. Error: {submittedAppResponse.ErrorMessage}, Status Code: {submittedAppResponse.StatusCode}");
                 application.Submitted = false;
                 await Context.Interaction.ModifyResponse([ApplicationStartEmbed, InternalErrorApplicationRetrievalFailure(submittedAppResponse)], [new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())]);
                 return;
             }
             
+            logger.LogInteractionDebug(Context, $"User {Context.User.Username} ({Context.User.Id}) successfully submitted their application. Application ID: {appId}. Forwarding application to review.");
             _ = applicationService.CompleteAndForwardApplicationToReview(Context.User.Id, submittedApplication);
             
             await Context.Interaction.ModifyResponse([ApplicationSubmitEmbed(appId)], [new ActionRowProperties().WithComponents(application.GenerateButtonsForApplication())]);
