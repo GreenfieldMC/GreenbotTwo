@@ -39,6 +39,9 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
         GenericEmbeds.UserError("Greenfield Application Service",
             $"Failed to forward application ID: {appId}. Error: {error}");
 
+    private static readonly Func<long, string, EmbedProperties> BotDMUserError = (appId, error) =>
+        GenericEmbeds.UserError("Greenfield Application Service", $"Failed to DM User for application ID: {appId}. Error: {error}");
+
     #endregion
 
     #region Application Decision Embeds
@@ -471,22 +474,31 @@ public class ApplicationService(ILogger<IApplicationService> logger, IOptions<Bu
                     .WithMessageReference(MessageReferenceProperties.Reply(channel.Id, false))
                     .WithAllowedMentions(new AllowedMentionsProperties().AddAllowedUsers(discordSnowflake))
             );
-            
-            var dmChannel = await dmChannelTask;
-            var userSummaryMsg = await restClient.SendMessageAsync(dmChannel.Id, new MessageProperties()
-                .WithComponents([summary.WithAccentColor(ColorHelpers.Failure).WithComponents(baseComponents)])
-                .WithFlags(MessageFlags.IsComponentsV2)
-                .WithAllowedMentions(new AllowedMentionsProperties().AddAllowedUsers(discordSnowflake))
-            );
-            
-            await restClient.SendMessageAsync(dmChannel.Id,
-                new MessageProperties()
-                    .WithContent(discordSnowflake.Mention())
-                    .WithEmbeds([denialEmbed])
+
+            try
+            {
+                var dmChannel = await dmChannelTask;
+                var userSummaryMsg = await restClient.SendMessageAsync(dmChannel.Id, new MessageProperties()
+                    .WithComponents([summary.WithAccentColor(ColorHelpers.Failure).WithComponents(baseComponents)])
+                    .WithFlags(MessageFlags.IsComponentsV2)
                     .WithAllowedMentions(new AllowedMentionsProperties().AddAllowedUsers(discordSnowflake))
-                    .WithMessageReference(MessageReferenceProperties.Reply(userSummaryMsg.Id, false))
-                
-            );
+                );
+                await restClient.SendMessageAsync(dmChannel.Id,
+                    new MessageProperties()
+                        .WithContent(discordSnowflake.Mention())
+                        .WithEmbeds([denialEmbed])
+                        .WithAllowedMentions(new AllowedMentionsProperties().AddAllowedUsers(discordSnowflake))
+                        .WithMessageReference(MessageReferenceProperties.Reply(userSummaryMsg.Id, false))
+
+                );
+            }
+            catch (Exception e)
+            {
+                logger.LogInformation(e, "Failed to send DM to user {DiscordId} for denied application ID {ApplicationId}.", discordSnowflake, appToDeny.ApplicationId);
+                _ = await restClient.SendMessageAsync(options.Value.ReviewChannelId,
+                    new MessageProperties().WithEmbeds([BotDMUserError(appToDeny.ApplicationId, e.Message)])
+                );
+            }
 
             return Result<ulong>.Success(channel.Id);
         }
