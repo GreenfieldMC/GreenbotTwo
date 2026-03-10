@@ -1,7 +1,6 @@
 using GreenbotTwo.Configuration.Models.Commands;
 using GreenbotTwo.Embeds;
 using GreenbotTwo.Extensions;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NetCord;
@@ -10,8 +9,10 @@ using NetCord.Services.ApplicationCommands;
 
 namespace GreenbotTwo.Commands;
 
-public class InstallCommand(IOptions<InstallCommandSettings> settings, ILogger<IApplicationCommandContext> commandLogger) : ApplicationCommandModule<ApplicationCommandContext>
+public class InstallCommand(IOptions<InstallCommandSettings> settings, ILogger<IApplicationCommandContext> commandLogger, RestClient restClient) : ApplicationCommandModule<ApplicationCommandContext>
 {
+    private static readonly Func<ulong, EmbedProperties> SentToOtherUser = recipient => GenericEmbeds.Success("Installation Instructions", $"The installation instructions have been sent to {recipient.Mention()}.");
+    private static readonly Func<ulong, string, EmbedProperties> ErrorUnableToSendToOtherUser = (recipient, error) => GenericEmbeds.UserError("Installation Instructions", $"Unable to send the installation instructions to {recipient.Mention()}. Error: {error}");
 
     [SlashCommand("install", "Instructions to install Greenfield")]
     public async Task Install(
@@ -37,7 +38,18 @@ public class InstallCommand(IOptions<InstallCommandSettings> settings, ILogger<I
             return;
         }
 
-        await Context.Channel.SendMessageAsync(message);
+        var dmChannel = await restClient.GetDMChannelAsync(userWhoNeedsInstructions.Id);
+        try
+        {
+            await dmChannel.SendMessageAsync(message);
+        }
+        catch (Exception e)
+        {
+            await Context.Interaction.ModifyResponse([ErrorUnableToSendToOtherUser(userWhoNeedsInstructions.Id, e.Message)]);
+            return;
+        }
+        
+        await Context.Interaction.ModifyResponse([SentToOtherUser(userWhoNeedsInstructions.Id)], flags: MessageFlags.Ephemeral);
     }
     
     public enum OperatingSystem
