@@ -49,7 +49,7 @@ public class ApplicationsCommand(IGreenfieldApiService gfApiService, IMojangServ
         [UserRequiresAnyRoleOrSelf<ApplicationCommandSettings, User>("RolesThatCanListOtherUserApps")]
         [SlashCommandParameter(Description = "The Discord user to list applications for.")] User user)
     {
-        commandLogger.LogCommandExecution(Context, $"user: {user.Username}");
+        commandLogger.LogCommandExecution(Context, $"list-by-discord user: {user.Username}");
         await Context.Interaction.SendNotifyLoadingResponse(MessageFlags.Ephemeral);
         
         var gfUserResult = await gfApiService.GetUsersConnectedToDiscordAccount(user.Id);
@@ -106,7 +106,7 @@ public class ApplicationsCommand(IGreenfieldApiService gfApiService, IMojangServ
         [SlashCommandParameter(Name = "minecraft_username", Description = "The Minecraft username to list applications for.")]
         string minecraftUsername)
     {
-        commandLogger.LogCommandExecution(Context, $"minecraft_username: {minecraftUsername}");
+        commandLogger.LogCommandExecution(Context, $"list-by-minecraft minecraft_username: {minecraftUsername}");
         await Context.Interaction.SendNotifyLoadingResponse(MessageFlags.Ephemeral);
         
         var mojangUserResult = await mojangService.GetMinecraftProfileByUsername(minecraftUsername);
@@ -160,7 +160,7 @@ public class ApplicationsCommand(IGreenfieldApiService gfApiService, IMojangServ
         [ApplicationRequiresAnyRoleOrOwner<ApplicationCommandSettings>("RolesThatCanViewOtherUserApps")]
         Application application) 
     {
-        commandLogger.LogCommandExecution(Context, $"application_id: {application.ApplicationId}");
+        commandLogger.LogCommandExecution(Context, $"view application_id: {application.ApplicationId}");
         await Context.Interaction.SendNotifyLoadingResponse(MessageFlags.Ephemeral);
         
         var userDiscordAccountResponse = await gfApiService.GetDiscordAccountsForUser(application.UserId);
@@ -196,7 +196,7 @@ public class ApplicationsCommand(IGreenfieldApiService gfApiService, IMojangServ
         [ApplicationRequiresAnyRoleOrOwner<ApplicationCommandSettings>("RolesThatCanForwardOtherUserApps", true)]
         Application application)
     {
-        commandLogger.LogCommandExecution(Context, $"application_id: {application.ApplicationId}");
+        commandLogger.LogCommandExecution(Context, $"forward application_id: {application.ApplicationId}");
         await Context.Interaction.SendNotifyLoadingResponse(MessageFlags.Ephemeral);
 
         if (application.IsApproved || application.IsRejected)

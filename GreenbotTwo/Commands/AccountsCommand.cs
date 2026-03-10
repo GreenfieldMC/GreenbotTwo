@@ -45,7 +45,7 @@ public class AccountsCommand(IGreenfieldApiService apiService, IAccountLinkServi
         [UserRequiresAnyRoleOrSelf<AccountCommandSettings, User>("RolesThatCanViewOtherUserAccounts")]
         [SlashCommandParameter(Description = "The Discord user to view accounts for.")] User user)
     {
-        commandLogger.LogCommandExecution(Context, $"user: {user.Username}");
+        commandLogger.LogCommandExecution(Context, $"show-by-discord user: {user.Username}");
         await Context.Interaction.SendNotifyLoadingResponse(MessageFlags.Ephemeral);
         
         var userResponse = await apiService.GetUsersConnectedToDiscordAccount(user.Id);
@@ -85,7 +85,7 @@ public class AccountsCommand(IGreenfieldApiService apiService, IAccountLinkServi
         [UserRequiresAnyRoleOrSelf<AccountCommandSettings, string>("RolesThatCanViewOtherUserAccounts")]
         [SlashCommandParameter(Name = "minecraft_username", Description = "The Minecraft username to view accounts for.")] string minecraftUsername)
     {
-        commandLogger.LogCommandExecution(Context, $"minecraft_username: {minecraftUsername}");
+        commandLogger.LogCommandExecution(Context, $"show-by-minecraft minecraft_username: {minecraftUsername}");
         await Context.Interaction.SendNotifyLoadingResponse(MessageFlags.Ephemeral);
         
         var mojangUserResult = await mojangService.GetMinecraftProfileByUsername(minecraftUsername);

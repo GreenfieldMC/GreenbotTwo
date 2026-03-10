@@ -22,7 +22,7 @@ public class ApplyCommand(IApplicationService applicationService, IGreenfieldApi
     [SubSlashCommand("start", "Start a new application to join the Greenfield team")]
     public async Task Apply()
     {
-        commandLogger.LogCommandExecution(Context);
+        commandLogger.LogCommandExecution(Context, "start");
         await Context.Interaction.SendNotifyLoadingResponse(MessageFlags.Ephemeral);
 
         //if they have an application form actively being filled out, we should return that.
@@ -64,7 +64,7 @@ public class ApplyCommand(IApplicationService applicationService, IGreenfieldApi
     [SubSlashCommand("cancel", "Cancel your current in-progress application")]
     public async Task Cancel()
     {
-        commandLogger.LogCommandExecution(Context);
+        commandLogger.LogCommandExecution(Context, "cancel");
         await Context.Interaction.SendNotifyLoadingResponse(MessageFlags.Ephemeral);
         
         var application = applicationService.GetApplication(Context.User.Id);

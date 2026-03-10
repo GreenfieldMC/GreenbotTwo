@@ -8,11 +8,13 @@ using NetCord.Services.ApplicationCommands;
 
 namespace GreenbotTwo.Commands;
 
-public class CodesCommand(IGreenfieldApiService greenfieldApiService, ILogger<IApplicationCommandContext> commandLogger) : ApplicationCommandModule<ApplicationCommandContext>
+public class CodesCommand(IGreenfieldApiService greenfieldApiService, ILogger<IApplicationCommandContext> commandLogger, RestClient restClient) : ApplicationCommandModule<ApplicationCommandContext>
 {
     
     private static readonly EmbedProperties ErrorCouldNotFetchBuildCodes = GenericEmbeds.InternalError("Internal Application Error", "An error occurred while fetching build codes. Please try again later.");
     private static readonly EmbedProperties ErrorNoBuildCodesDefined = GenericEmbeds.UserError("Current Server Build Codes", "There are currently no build codes available.");
+    private static readonly Func<ulong, EmbedProperties> SentToOtherUser = recipient => GenericEmbeds.Success("Current Server Build Codes", $"The current server build codes have been sent to {recipient.Mention()}.");
+    private static readonly Func<ulong, string, EmbedProperties> ErrorUnableToSendToOtherUser = (recipient, error) => GenericEmbeds.UserError("Current Server Build Codes", $"Unable to send the current server build codes to {recipient.Mention()}. Error: {error}");
     
     [SlashCommand("codes", "Get all build codes from Greenfield")]
     public async Task Codes(
@@ -69,7 +71,17 @@ public class CodesCommand(IGreenfieldApiService greenfieldApiService, ILogger<IA
             return;
         }
 
-        await Context.Interaction.DeleteResponseAsync();
-        await Context.Channel.SendMessageAsync(message);
+        var dmChannel = await restClient.GetDMChannelAsync(userWhoNeedsCodes.Id);
+        try
+        {
+            await dmChannel.SendMessageAsync(message);
+        }
+        catch (Exception e)
+        {
+            await Context.Interaction.ModifyResponse([ErrorUnableToSendToOtherUser(userWhoNeedsCodes.Id, e.Message)]);
+            return;
+        }
+        
+        await Context.Interaction.ModifyResponse([SentToOtherUser(userWhoNeedsCodes.Id)], flags: MessageFlags.Ephemeral);
     }
 }
